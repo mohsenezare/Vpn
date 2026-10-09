@@ -46,6 +46,14 @@ final class HubPanel {
   TextView chevron=text("›",28,0xff99a7b0,false);pad(chevron,9,0,0,0);line.addView(chevron);
   if(action!=null){outer.setOnClickListener(v->action.run());outer.setClickable(true);}
  }
+ /** Wrap-height sheet scrolls instead of overflowing narrow Android displays. */
+ final class MaxSheetScroll extends ScrollView {
+  MaxSheetScroll(Context c){super(c);}
+  @Override protected void onMeasure(int width,int height){
+   int limit=(int)(activity.getResources().getDisplayMetrics().heightPixels*.68f);
+   super.onMeasure(width,View.MeasureSpec.makeMeasureSpec(limit,View.MeasureSpec.AT_MOST));
+  }
+ }
  interface SheetContent{void render(LinearLayout body,Dialog dialog);}
  void sheet(String title,String detail,SheetContent render){
   Dialog dialog=new Dialog(activity);
@@ -59,7 +67,7 @@ final class HubPanel {
   TextView close=text("×",28,MUTED,false);close.setGravity(Gravity.CENTER);close.setBackground(bg(0xffffffff,24));
   top.addView(close,new LinearLayout.LayoutParams(px(38),px(38)));close.setOnClickListener(v->dialog.dismiss());
   space(root,14);
-  ScrollView scroller=new ScrollView(activity);scroller.setFillViewport(false);scroller.setVerticalScrollBarEnabled(false);
+  ScrollView scroller=new MaxSheetScroll(activity);scroller.setFillViewport(false);scroller.setVerticalScrollBarEnabled(false);
   LinearLayout body=col();scroller.addView(body);root.addView(scroller,new LinearLayout.LayoutParams(-1,-2));
   render.render(body,dialog);
   dialog.setContentView(root);
