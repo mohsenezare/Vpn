@@ -31,6 +31,11 @@ def refresh(channel):
             post_ids={int(pid) for pid in re.findall(r'data-post="npv_iran/([0-9]+)"',body,re.I)}
             entries={'https://t.me/npv_iran/'+str(pid):{'k':'NAPSTERNETV','v':'https://t.me/npv_iran/'+str(pid)}
                      for pid in sorted(post_ids,reverse=True)[:3]}
+        if channel=='mitivpn':
+            # Keep only the three newest public NPV attachment post references.
+            valid=[e for e in entries.values() if e.get('k')=='NAPSTERNETV']
+            valid.sort(key=lambda item:int(item['v'].rsplit('/',1)[-1]),reverse=True)
+            entries={item['v']:item for item in valid[:3]}
         if not entries:raise ValueError('no supported public entries')
         data={'updated':int(time.time()*1000),'entries':list(entries.values())[:350]}
         (root/(channel+'.json')).write_text(json.dumps(data,ensure_ascii=False),encoding='utf-8')
