@@ -45,3 +45,15 @@ Public Telegram links/file-post references are also mirrored by GitHub Actions e
 - Requests made while a source refresh is already running now receive a completion callback instead of silently being ignored.
 - **Not yet supported:** in-app Telegram account login, independent V2Ray / NapsternetV VPN tunnels, automatic VPN-protocol failover, guaranteed connectivity. Install the separate supported clients where indicated.
 - GitHub Actions builds a **debug APK**. CI and physical-device tests must pass before treating this release as verified.
+
+## 0.5 experimental native sing-box tunnel (arm64)
+
+- Adds an Android `VpnService` implementation with sing-box `libbox` bundled as an **arm64-v8a native library**. Built in GitHub Actions from verified upstream commit `f63091d14d8984d53dc9a5563cb72af978b9779e` (sing-box tag v1.12.22) using the SagerNet gomobile fork. This is not a library downloaded from an unknown config channel.
+- Supports link-to-configuration translation for VLESS (TLS/Reality), VMess, Trojan, Shadowsocks and Hysteria 2. Not every protocol variant, transport or free-share format is supported, and imported configurations are not trusted.
+- The slide-to-connect control can initiate an in-app TUN session, while paid OpenVPN profiles still use the separate **OpenVPN for Android** client. Telegram proxy links open Telegram and NapsternetV file posts still use an external client.
+- VPN Gate's official directory may be DNS-blocked by networks. It now falls back to an off-network GitHub mirror which is refreshed every four hours (best effort); an upstream public snapshot is checked against a commit-pinned SHA-256 before use. On all failures, cached profiles are preserved and a real error is reported.
+- `Tunnel active` only means that Android granted the local TUN interface and libbox started. It **does not** guarantee that the selected public upstream node can carry traffic, or that it will remain stable. TCP probing is preliminary only.
+- No Telegram account login, session scraping, untrusted executable profile installation or secret upload is performed. Public/free server links can be dangerous; never assume their operators are trustworthy.
+- The APK is not yet production verified: **CI compilation and real-device network tests are separate requirements**. Until an Android device has successfully connected through the tunnel, this remains an experimental build.
+- Only `arm64-v8a` devices are supported by the new native artifact; other ABIs need dedicated builds.
+- GPL-3.0 notice: sing-box is copyrighted by its upstream authors and licensed under GPL-3.0-or-later; the source tree and build process are available publicly for review. See the upstream [sing-box LICENSE](https://github.com/SagerNet/sing-box/blob/v1.12.22/LICENSE).
