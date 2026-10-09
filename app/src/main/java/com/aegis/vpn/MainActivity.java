@@ -313,14 +313,15 @@ public final class MainActivity extends Activity {
                 return Boolean.compare(!a.value.startsWith("vless://"),!b.value.startsWith("vless://"));
             });
             ArrayList<String> candidates=new ArrayList<>();
-            HashSet<String> usedHost=new HashSet<>();
+            HashMap<String,Integer> perEndpoint=new HashMap<>();
             for(FeedParser.Entry e:choices){
                 if(candidates.size()>=12)break;
                 try{
                     org.json.JSONObject o=SingBoxConfig.outbound(e.value);
                     String endpoint=o.getString("server")+":"+o.getInt("server_port");
-                    // Avoid 12 configs pointing at the same endpoint/IP.
-                    if(usedHost.add(endpoint))candidates.add(e.value);
+                    // Maintain route diversity, but allow two distinct credentials per host.
+                    int already=perEndpoint.containsKey(endpoint)?perEndpoint.get(endpoint):0;
+                    if(already<2){candidates.add(e.value);perEndpoint.put(endpoint,already+1);}
                 }catch(Exception ignored){}
             }
             try{connectNative(SingBoxConfig.buildAuto(candidates));}
