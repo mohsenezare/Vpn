@@ -468,7 +468,9 @@ public final class MainActivity extends Activity {
             Path mask=new Path();
             mask.addCircle(cx,cy,r,Path.Direction.CW);
             c.clipPath(mask);
-            int side=Math.min(shield.getWidth(),shield.getHeight());
+            // Zoom slightly into the shield artwork to hide the square icon tile,
+            // preserving the center logo while keeping the outer knob perfectly round.
+            int side=(int)(Math.min(shield.getWidth(),shield.getHeight())*.78f);
             int sx=(shield.getWidth()-side)/2,sy=(shield.getHeight()-side)/2;
             p.setFilterBitmap(true);p.setAlpha(255);
             c.drawBitmap(shield,new Rect(sx,sy,sx+side,sy+side),
