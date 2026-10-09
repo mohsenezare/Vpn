@@ -20,8 +20,8 @@ try:
         if not re.fullmatch(r"[0-9a-fA-F.:]{7,48}",host) or host in seen:continue
         try:
             config=base64.b64decode(row[14],validate=True).decode("utf-8")
-            if not (80<len(config)<75000 and re.search(r"(?m)^client\\s*$",config) and re.search(r"(?m)^remote\\s+\\S+",config)):continue
-            if re.search(r"(?im)^\\s*(script-security|up|down|plugin|client-connect|client-disconnect)\\s+",config):continue
+            if not (80<len(config)<75000 and re.search(r"(?m)^client\s*$",config) and re.search(r"(?m)^remote\s+\S+",config)):continue
+            if re.search(r"(?im)^\s*(script-security|up|down|plugin|client-connect|client-disconnect)\s+",config):continue
             ping=int(row[3]) if row[3].isdigit() else 0
             country=row[5].strip()[:45]
             nodes.append({"host":host,"country":country,"ping":ping,"ovpn":config})
