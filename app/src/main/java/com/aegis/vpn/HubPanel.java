@@ -90,7 +90,10 @@ final class HubPanel {
     d.dismiss();activity.chooseSmartMode();
    });
    row(body,"V2Ray / Reality / Hysteria","Browse and select an individual tunnel",0xff815ef3,()->{d.dismiss();list("V2RAY");});
-   row(body,"OpenVPN locations","Volunteer nodes · manually selectable",0xfff8863c,()->{d.dismiss();activity.openVpnLocations();});
+   row(body,"OpenVPN locations","Ranked by published speed and uptime · live TCP checks",0xfff8863c,()->{d.dismiss();activity.openVpnLocations();});
+   row(body,"Backup · official provider","Open official WARP or import your own OpenVPN profile",0xff03b89c,()->{
+       d.dismiss();activity.tab=3;activity.screen.invalidate();
+   });
    row(body,"Telegram MTProto","Add a proxy to Telegram, no channel login needed",0xff29a9ec,()->{d.dismiss();telegramMenu();});
    row(body,"Import configurations","Paste share link, file, or HTTPS subscription",0xff4478d6,()->{d.dismiss();importMenu();});
    row(body,"Refresh all sources","Public sources · keeps your manual choice",0xfff67b32,()->{d.dismiss();activity.refreshAll();});
