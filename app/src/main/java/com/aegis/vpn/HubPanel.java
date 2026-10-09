@@ -32,7 +32,7 @@ final class HubPanel {
  void pad(View v,int l,int t,int r,int b){v.setPadding(px(l),px(t),px(r),px(b));}
  void space(LinearLayout c,int h){View s=new View(activity);c.addView(s,new LinearLayout.LayoutParams(1,px(h)));}
  void row(LinearLayout body,String title,String subtitle,int tint,Runnable action){
-  LinearLayout outer=col();outer.setBackground(bg(0xf4ffffff,22));
+  LinearLayout outer=col();outer.setBackground(bg(0xcaffffff,22));
   LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.bottomMargin=px(9);body.addView(outer,lp);
   LinearLayout line=new LinearLayout(activity);line.setGravity(Gravity.CENTER_VERTICAL);pad(line,16,13,15,12);outer.addView(line);
   View dot=new View(activity);dot.setBackground(bg(tint,11));
@@ -92,7 +92,6 @@ final class HubPanel {
    row(body,"V2Ray / Reality / Hysteria","Browse and select an individual tunnel",0xff815ef3,()->{d.dismiss();list("V2RAY");});
    row(body,"OpenVPN locations","Volunteer nodes · manually selectable",0xfff8863c,()->{d.dismiss();activity.openVpnLocations();});
    row(body,"Telegram MTProto","Add a proxy to Telegram, no channel login needed",0xff29a9ec,()->{d.dismiss();telegramMenu();});
-   row(body,"NapsternetV · compatible imports","3 recent source posts are NOT connectable configs",0xffe9569c,()->{d.dismiss();napsterMenu();});
    row(body,"Import configurations","Paste share link, file, or HTTPS subscription",0xff4478d6,()->{d.dismiss();importMenu();});
    row(body,"Refresh all sources","Public sources · keeps your manual choice",0xfff67b32,()->{d.dismiss();activity.refreshAll();});
    row(body,"Source health / diagnostics","Show last valid updates and errors",0xff81929a,()->{d.dismiss();activity.info(hub.report());});
@@ -141,7 +140,7 @@ final class HubPanel {
  void coloredConfigRow(LinearLayout body,FeedParser.Entry e,boolean selected,Runnable click){
   LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.bottomMargin=px(10);
   LinearLayout line=new LinearLayout(activity);line.setGravity(Gravity.CENTER_VERTICAL);pad(line,14,12,12,12);
-  line.setBackground(bg(selected?0xffedfff7:0xf6ffffff,22));body.addView(line,lp);
+  line.setBackground(bg(selected?0xdbeafff8:0xc9ffffff,22));body.addView(line,lp);
   LinearLayout marker=col();marker.setGravity(Gravity.CENTER);marker.setBackground(bg(0xfff3f6fb,15));
   LinearLayout.LayoutParams markerLp=new LinearLayout.LayoutParams(px(40),px(42));markerLp.rightMargin=px(11);line.addView(marker,markerLp);
   TextView symbol=text("◆",22,tint(e.value),true);symbol.setGravity(Gravity.CENTER);marker.addView(symbol);
@@ -163,8 +162,8 @@ final class HubPanel {
   List<FeedParser.Entry> a=entries(kind);
   a.sort(Comparator.comparingLong(e->probe.rank(e.value)));
   String details=kind.equals("V2RAY")?"Select a config to pin it. Tap Test to measure TCP latency."
-      :kind.equals("PROXY")?"Tap to add directly to Telegram":"These are POST REFERENCES, not VPN servers; encrypted NPV cannot connect here.";
-  sheet(kind.equals("V2RAY")?"VPN servers":kind.equals("PROXY")?"Telegram proxies":"NPV post references",details,(body,d)->{
+      :"Tap to add a public MTProto proxy to Telegram; connection must be confirmed there.";
+  sheet(kind.equals("V2RAY")?"VPN servers":"Telegram proxies",details,(body,d)->{
    if(kind.equals("V2RAY")){
     row(body,"AUTO · Smart selection","Test multiple servers through sing-box",GREEN,()->{d.dismiss();activity.chooseSmartMode();});
    }
@@ -176,7 +175,7 @@ final class HubPanel {
    });
    if(a.isEmpty())row(body,"No cached entries","Refresh this category or import manually",MUTED,()->{
     d.dismiss();
-    if(kind.equals("PROXY")||kind.equals("NAPSTERNETV")){
+    if(kind.equals("PROXY")){
      Toast.makeText(activity,"Refreshing "+kind+"…",Toast.LENGTH_SHORT).show();
      hub.refreshCategory(kind,()->{
       if(entries(kind).isEmpty())activity.info("No public "+kind+" entries available. Use manual import or try later.");
@@ -198,7 +197,6 @@ final class HubPanel {
  }
  void entry(FeedParser.Entry e){
   if(e.kind.equals("PROXY")){telegramConfirm(e.value);return;}
-  if(e.kind.equals("NAPSTERNETV")){napsterEntry(e.value);return;}
   sheet("Connection options",type(e.value)+" · "+host(e.value),(body,d)->{
    row(body,"Use this server · manual","Keep selected when refreshing sources",GREEN,()->{
     d.dismiss();activity.selectManualNative(e.value,false);
@@ -221,9 +219,14 @@ final class HubPanel {
  }
  void telegramMenu(){
   sheet("Telegram proxies","Add directly to Telegram — no channel access required",(body,d)->{
-   row(body,"↻ Refresh MTProto only","Update public proxy list without waiting for VPN feeds",0xff15a98e,()->{
-    d.dismiss();Toast.makeText(activity,"Updating Telegram proxies…",Toast.LENGTH_SHORT).show();
-    hub.refreshCategory("PROXY",()->list("PROXY"));
+   row(body,"↻ Find reachable MTProto","Refresh and TCP-check public Telegram proxies",0xff15a98e,()->{
+    d.dismiss();Toast.makeText(activity,"Checking Telegram proxy addresses…",Toast.LENGTH_SHORT).show();
+    hub.refreshCategory("PROXY",()->{
+      List<FeedParser.Entry> options=entries("PROXY");
+      if(options.isEmpty()){activity.info("No public MTProto proxies available; add a personal proxy instead.");return;}
+      if(!probe.busy)probe.test(options,()->list("PROXY"));
+      else list("PROXY");
+    });
    });
    row(body,"+ Enter MTProto proxy","Server · port · secret",0xff279fd8,()->{d.dismiss();telegramForm();});
    row(body,"Available public proxies","Select a saved or public proxy",0xff45a3e1,()->{d.dismiss();list("PROXY");});
@@ -262,68 +265,6 @@ final class HubPanel {
      catch(Exception x){activity.info("Install Telegram to use this proxy.");}
     }
    }).setNegativeButton("Cancel",null).show();
- }
- void napsterMenu(){
-  sheet("NapsternetV · compatibility","Encrypted NPV attachments cannot run in sing-box. Import standard share links here.",(body,d)->{
-   row(body,"↻ Update three recent NPV posts","Read latest three available NPV attachment posts from @mitivpn",0xffd65fa8,()->{
-    d.dismiss();Toast.makeText(activity,"Refreshing last 3 NPV posts…",Toast.LENGTH_SHORT).show();
-    hub.refreshCategory("NAPSTERNETV",()->list("NAPSTERNETV"));
-   });
-   row(body,"Paste config or subscription","VLESS, VMess, Trojan, SS, HY2 share links",0xffe75a98,()->{d.dismiss();paste("V2RAY");});
-   row(body,"Import from clipboard","Use copied readable share links without Telegram",0xff39b7b1,()->{d.dismiss();clipboard();});
-   row(body,"Import local file","Supports plain-text share links and Base64 lists",0xff9f6bed,()->{d.dismiss();activity.pickConfigFile();});
-   row(body,"Three latest public NPV posts","Post references only · open to inspect readable links",0xffe5a34b,()->{d.dismiss();list("NAPSTERNETV");});
-   row(body,"Encrypted .npv/.npv4","Cannot decrypt proprietary files without format support",MUTED,()->activity.info("Encrypted NapsternetV profiles are not interchangeable with sing-box configurations. Import plain-text share links or a supported sing-box JSON instead. No fake conversion is performed."));
-  });
- }
- void napsterEntry(String link){
-  sheet("NapsternetV · recent post","Public post only · Aegis reads its text without signing into Telegram",(body,d)->{
-   row(body,"Read available configuration","Check post for usable VLESS, VMess, Trojan, SS or HY2 links",0xffd850a1,()->{
-    d.dismiss();readNapsterPost(link);
-   });
-   row(body,"Import a local file","Only readable share links and text subscriptions are supported",0xffaf6ced,()->{
-    d.dismiss();activity.pickConfigFile();
-   });
-   row(body,"Copy original post URL","Encrypted proprietary .npv attachments cannot be decoded",MUTED,()->{
-    android.content.ClipboardManager clip=(android.content.ClipboardManager)activity.getSystemService(Context.CLIPBOARD_SERVICE);
-    clip.setPrimaryClip(ClipData.newPlainText("NPV post",link));
-    Toast.makeText(activity,"Source link copied",Toast.LENGTH_SHORT).show();
-   });
-  });
- }
- void readNapsterPost(String link){
-  long id=FeedParser.postId(link);
-  if(id<0){activity.info("Invalid post ID");return;}
-  Toast.makeText(activity,"Checking latest public post text…",Toast.LENGTH_SHORT).show();
-  new Thread(()->{
-   try{
-    // Public Telegram preview. We do not download or execute proprietary attachments.
-    Uri post=Uri.parse(link);
-    java.util.List<String> segments=post.getPathSegments();
-    if(segments.size()<2)throw new Exception("Invalid public post URL");
-    String channel=segments.get(0);
-    if(!channel.equals("mitivpn")&&!channel.equals("npv_iran"))
-      throw new Exception("Unsupported public source channel");
-    String page=SourceHub.get("https://t.me/s/"+channel+"?before="+(id+1));
-    String mark="data-post=\\\""+channel+"/"+id+"\\\"";
-    int start=page.indexOf(mark);
-    if(start<0)throw new Exception("The post is not currently available in the public preview.");
-    int end=page.indexOf("data-post=",start+mark.length());
-    String section=page.substring(start,end<0?Math.min(page.length(),start+45000):end);
-    List<FeedParser.Entry> entries=FeedParser.parse(section,link);
-    int imported=0;
-    for(FeedParser.Entry e:entries){
-     if(e.kind.equals("V2RAY")&&SingBoxConfig.supported(e.value)){
-      vault.put("V2RAY",e.value);imported++;
-     }
-    }
-    final int count=imported;
-    activity.runOnUiThread(()->{
-     if(count>0){Toast.makeText(activity,count+" compatible configs added",Toast.LENGTH_LONG).show();list("V2RAY");}
-     else activity.info("This recent post contains no readable supported configuration. Proprietary .npv attachments cannot be converted without their decoder.");
-    });
-   }catch(Exception e){activity.runOnUiThread(()->activity.info("Post preview unavailable: "+e.getMessage()));}
-  },"napster-preview").start();
  }
  void importMenu(){
   sheet("Import to Aegis","Locally encrypted · no credentials sent to Aegis servers",(body,d)->{
