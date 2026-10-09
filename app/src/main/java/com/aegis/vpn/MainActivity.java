@@ -939,8 +939,10 @@ public final class MainActivity extends Activity {
                                 selectOpenVpnServer(index);
                             }else{
                                 FeedParser.Entry entry=chosenEntries().get(index);
-                                if(locationMode==1)hubPanel.entry(entry);
-                                else hubPanel.telegramConfirm(entry.value);
+                                if(locationMode==1){
+                                    selectManualNative(entry.value,true);
+                                    setTab(0);
+                                }else hubPanel.telegramConfirm(entry.value);
                             }
                         }return true;
                     }
