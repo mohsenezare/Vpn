@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['scripts/refresh_sources.py', '.github/workflows/source-mirror.yml']
+    paths: ['scripts/refresh_sources.py', 'scripts/refresh_openvpn.py', '.github/workflows/source-mirror.yml']
 permissions:
   contents: write
 concurrency:

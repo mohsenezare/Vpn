@@ -38,7 +38,7 @@ jobs:
           git clone --depth=1 --branch v1.12.22 https://github.com/SagerNet/sing-box.git /tmp/sing-box
           cd /tmp/sing-box
           test "$(git rev-parse HEAD)" = "f63091d14d8984d53dc9a5563cb72af978b9779e"
-          gomobile bind -target=android/arm64 -androidapi=26 -javapkg=io.nekohasekai -libname=box \
+          gomobile bind -ldflags=-checklinkname=0 -target=android/arm64 -androidapi=26 -javapkg=io.nekohasekai -libname=box \
             -tags="with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api" \
             ./experimental/libbox/
           mkdir -p "$GITHUB_WORKSPACE/app/libs"
@@ -61,4 +61,4 @@ jobs:
         run: |
           tag="build-${GITHUB_RUN_NUMBER}"
           cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.5.0-arm64-debug.apk
-          gh release create "$tag" AegisVPN-v0.5.0-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.5.0 · build ${GITHUB_RUN_NUMBER}" --notes "Debug APK. OpenVPN requires OpenVPN for Android; V2Ray configs import into v2rayNG; Telegram proxies and NapsternetV file posts open externally. Connection on your ISP has not been verified."
+          gh release create "$tag" AegisVPN-v0.5.0-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.5.0 · build ${GITHUB_RUN_NUMBER}" --notes "Debug APK. OpenVPN requires OpenVPN for Android; Embedded sing-box native tunnel for VLESS/VMess/Trojan/SS/Hysteria2; Telegram proxies and NapsternetV file posts open externally. Connection on your ISP has not been verified."
