@@ -641,8 +641,8 @@ public final class MainActivity extends Activity {
                 c.drawArc(x-4,sy-4,x+sw+4,sy+sh+4,phase*360,115,false,p);
                 p.setStyle(Paint.Style.FILL);
             }
-            center(c,on?(SingVpnService.verifiedRoute?"Live route passed HTTP check":"Tunnel active · route check pending"):
-                connecting?"Establishing your secure connection":"Slide or tap the glowing button",
+            center(c,on?"Tap center to disconnect immediately":
+                connecting?"Tap center to cancel connection":"Slide or tap the glowing button",
                 W/2,sy+sh+32,11.5f,on?0xff288e6e:MUTED,false);
             // Clear separation between Smart refresh and manual selection.
             float quickY=sy+sh+39;
