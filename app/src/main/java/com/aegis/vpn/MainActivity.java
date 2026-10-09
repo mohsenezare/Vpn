@@ -486,8 +486,7 @@ public final class MainActivity extends Activity {
             card(c,19,36,46,46,23,0xcaffffff);
             center(c,"⠿",42,65,22,0xff596670,true);
             center(c,"VPN",W/2,66,19,INK,true);
-            card(c,W-65,36,46,46,23,0xe4ffffff);
-            center(c,"⚙",W-42,66,22,0xff606e79,false);
+            // The approved header keeps just the library affordance; settings live there.
         }
         float sliderY(){return H*.409f;}
         float serverY(){return Math.min(Math.max(sliderY()+175,H*.655f),H-250);}
@@ -709,7 +708,7 @@ public final class MainActivity extends Activity {
                     return true;
                 }
                 if(y>H-82){setTab(Math.min(2,(int)(x/W*3)));return true;}
-                if(y<91){if(x<85)hubPanel.open();else if(x>W-85)showSettings();return true;}
+                if(y<91){if(x<85)hubPanel.open();return true;}
                 if(tab==0){
                     float quickY=sliderY()+92+39;
                     if(y>quickY&&y<quickY+42){
