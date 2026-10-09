@@ -17,13 +17,18 @@ final class SourceHub {
   ArrayList<String> s=new ArrayList<>();
   for(String c:CHANNELS)s.add("https://t.me/s/"+c);
   s.add("https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/Eternity.txt");
+  // Additional independently refreshed protocol feeds, including HY2 profiles.
+  // A downloaded link is not assumed to be reachable until the client tests it.
+  s.add("https://raw.githubusercontent.com/morpheusadam/v2ray-config/main/subs/bundles/mini.txt");
+  s.add("https://raw.githubusercontent.com/morpheusadam/v2ray-config/main/subs/bundles/lite.txt");
+  s.add("https://raw.githubusercontent.com/morpheusadam/v2ray-config/main/subs/bundles/hysteria2.txt");
   return s;
  }
  static String get(String address)throws Exception{
   URL u=new URL(address);if(!u.getProtocol().equals("https"))throw new IOException("HTTPS required");
   HttpURLConnection c=(HttpURLConnection)u.openConnection();
   c.setConnectTimeout(7000);c.setReadTimeout(9000);c.setInstanceFollowRedirects(false);
-  c.setRequestProperty("User-Agent","Mozilla/5.0 AegisVPN/0.4");
+  c.setRequestProperty("User-Agent","Mozilla/5.0 AegisVPN/0.6");
   try{
    int status=c.getResponseCode();if(status!=200)throw new IOException("HTTP "+status);
    try(InputStream in=c.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){
