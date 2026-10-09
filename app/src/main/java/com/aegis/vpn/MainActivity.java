@@ -47,9 +47,16 @@ public final class MainActivity extends Activity {
     private Handler handler=new Handler(Looper.getMainLooper());
     // Android UID counters include the app's own background fetches, so rate is approximate.
     private long lastRx=-1,lastTx=-1,lastSample=0;
+    private long startedAt=0;
+    private boolean priorActive=false;
+    private volatile long sampledRx=-1,sampledTx=-1;
     private volatile double downMbps=-1,upMbps=-1;
     private final Runnable meterTick=new Runnable(){
         @Override public void run(){
+            boolean active=isTunnelOn()||isConnecting();
+            if(active&&!priorActive)startedAt=android.os.SystemClock.elapsedRealtime();
+            if(!active)startedAt=0;
+            priorActive=active;
             if(SingVpnService.state==SingVpnService.TUNNEL_ACTIVE){
                 long rx=android.net.TrafficStats.getUidRxBytes(android.os.Process.myUid());
                 long tx=android.net.TrafficStats.getUidTxBytes(android.os.Process.myUid());
@@ -58,13 +65,20 @@ public final class MainActivity extends Activity {
                     downMbps=Math.max(0,(rx-lastRx)*8.0/(now-lastSample)/1000.0);
                     upMbps=Math.max(0,(tx-lastTx)*8.0/(now-lastSample)/1000.0);
                 }
+                sampledRx=rx;sampledTx=tx;
                 lastRx=rx;lastTx=tx;lastSample=now;
-            }else{downMbps=-1;upMbps=-1;lastRx=-1;lastTx=-1;lastSample=0;}
-            if(screen!=null&&SingVpnService.state==SingVpnService.TUNNEL_ACTIVE)screen.invalidate();
+            }else{downMbps=-1;upMbps=-1;lastRx=-1;lastTx=-1;lastSample=0;
+                sampledRx=-1;sampledTx=-1;}
+            if(screen!=null&&(active||tab==2))screen.invalidate();
             handler.postDelayed(this,1400);
         }
     };
     String rate(double n){return n<0?"—":String.format(java.util.Locale.US,"%.2f",n);}
+    String uptime(){
+        if(startedAt==0)return "—";
+        long seconds=Math.max(0,(android.os.SystemClock.elapsedRealtime()-startedAt)/1000);
+        return String.format(java.util.Locale.US,"%02d:%02d:%02d",seconds/3600,seconds/60%60,seconds%60);
+    }
     @Override protected void onResume(){super.onResume();handler.removeCallbacks(meterTick);handler.post(meterTick);}
     @Override protected void onPause(){handler.removeCallbacks(meterTick);super.onPause();}
 
@@ -606,9 +620,9 @@ public final class MainActivity extends Activity {
                     new int[]{0x6af8bbc8,0x00ffffff},null,Shader.TileMode.CLAMP);
                 float sx=24,sy=sliderY(),width=W-48;
                 sliderWarmShader=new LinearGradient(sx,sy,sx+width,sy+92,
-                    0xffffb34c,0xffee651f,Shader.TileMode.CLAMP);
+                    0xffffbd50,0xffff6039,Shader.TileMode.CLAMP);
                 sliderGreenShader=new LinearGradient(sx,sy,sx+width,sy+92,
-                    0xff09dfa0,0xff069363,Shader.TileMode.CLAMP);
+                    0xff00efbf,0xff04ad74,Shader.TileMode.CLAMP);
             }
             p.setShader(on?greenShader:warmShader);c.drawRect(0,0,W,H,p);
             p.setShader(footerShader);c.drawRect(0,0,W,H,p);p.setShader(null);
@@ -627,7 +641,7 @@ public final class MainActivity extends Activity {
             navbar(c);raw.restore();
         }
         void header(Canvas c){
-            card(c,19,36,46,46,23,0xcaffffff);
+            card(c,19,36,46,46,23,0x9bffffff);
             center(c,"⠿",42,65,22,0xff596670,true);
             center(c,"VPN",W/2,66,19,INK,true);
             // The approved header keeps just the library affordance; settings live there.
@@ -650,10 +664,11 @@ public final class MainActivity extends Activity {
                 c.drawCircle(cx,cy,95+ring*17+((connecting||on)?phase*7:0),p);
             }
             p.setStyle(Paint.Style.FILL);
+            card(c,x,sy,sw,sh,48,0x9effffff);
             p.setShader(on?sliderGreenShader:sliderWarmShader);
-            p.setStyle(Paint.Style.FILL);
-            c.drawRoundRect(x,sy,x+sw,sy+sh,48,48,p);
-            p.setShader(null);
+            p.setAlpha(192);p.setStyle(Paint.Style.FILL);
+            c.drawRoundRect(x+2,sy+2,x+sw-2,sy+sh-2,46,46,p);
+            p.setShader(null);p.setAlpha(255);
             // iOS-like inner specular glass glow.
             p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(2.5f);p.setColor(0xb9ffffff);
             c.drawRoundRect(x+2,sy+2,x+sw-2,sy+sh-2,46,46,p);
@@ -683,12 +698,12 @@ public final class MainActivity extends Activity {
                 W/2,sy+sh+32,11.5f,on?0xff288e6e:MUTED,false);
             // Clear separation between Smart refresh and manual selection.
             float quickY=sy+sh+39;
-            card(c,24,quickY,(W-56)/2,36,18,0xdbffffff);
-            card(c,W/2+4,quickY,(W-56)/2,36,18,0xdbffffff);
+            card(c,24,quickY,(W-56)/2,36,18,0x91ffffff);
+            card(c,W/2+4,quickY,(W-56)/2,36,18,0x91ffffff);
             center(c,"↻ Smart update",24+(W-56)/4f,quickY+23,12.5f,ORANGE,true);
             center(c,"☷ Choose server",W*.75f+1,quickY+23,12.5f,INK,true);
             float y=serverY();
-            card(c,21,y,W-42,78,25,0xeefeffff);
+            card(c,21,y,W-42,78,25,0xa4ffffff);
             circle(c,61,y+44,26,0xfff2f8fa);
             if(!paidMode&&preferNative)ink(c,"◈",46,y+55,33,0xff8b67f1,true);
             else ink(c,"◉",46,y+54,29,0xfff59440,true);
@@ -707,7 +722,7 @@ public final class MainActivity extends Activity {
             ink(c,cut(subtitle,(int)(W-147),12),101,y+58,12,MUTED,false);
             ink(c,"›",W-51,y+56,31,0xff99a8b0,false);
             float statY=y+92;
-            card(c,21,statY,W-42,80,24,0xeefeffff);
+            card(c,21,statY,W-42,80,24,0xa4ffffff);
             p.setColor(0xffe6eeee);c.drawRect(W/2-1,statY+12,W/2,statY+69,p);
             ink(c,"↓",41,statY+55,35,on?GREEN:ORANGE,true);
             ink(c,"Download",82,statY+31,12,MUTED,false);
@@ -740,7 +755,8 @@ public final class MainActivity extends Activity {
                 center(c,names[i],x+(chipW-5)/2,chipY+23,11.5f,locationMode==i?0xff009c70:MUTED,true);
             }
             card(c,21,222,W-42,44,19,0xeaffffff);
-            ink(c,updatingAll?"◌  Updating sources…":"↻  Smart update all sources",39,249,14,ORANGE,true);
+            ink(c,locationMode==0?(openProbe.busy?"◌  Checking live TCP delays…":"◌  Test OpenVPN TCP latency"):
+                (updatingAll?"◌  Updating sources…":"↻  Smart update all sources"),39,249,14,ORANGE,true);
             if(locationMode==1){
                 card(c,21,274,W-42,36,17,0xdfffffff);
                 ink(c,"Country source: "+(countryFilter.isEmpty()?"All":countryFilter)+"    ▼",38,297,13,INK,true);
@@ -764,7 +780,7 @@ public final class MainActivity extends Activity {
                     if(locationMode==0){
                         FreeDirectory.Node n=servers.get(i);
                         color=0xffed904b;title=n.country;subtitle=n.host;
-                        latency=n.ping>0?n.ping+" ms*":"— ms";
+                        latency=openProbe.label(n);
                         selected=!paidMode&&!preferNative&&selectedIndex==i;
                     }else{
                         FeedParser.Entry e=entries.get(i);
@@ -777,7 +793,8 @@ public final class MainActivity extends Activity {
                     p.setColor(color);c.drawRoundRect(29,y+17,35,y+62,4,4,p);
                     ink(c,cut(title,(int)(W-154),15),48,y+32,15,INK,true);
                     ink(c,cut(subtitle,(int)(W-160),11),48,y+54,11,MUTED,false);
-                    int latencyColor=locationMode==1?hubPanel.latencyColor(entries.get(i).value):color;
+                    int latencyColor=locationMode==1?hubPanel.latencyColor(entries.get(i).value):
+                        locationMode==0?(openProbe.ms(servers.get(i))>=0?GREEN:MUTED):color;
                     ink(c,cut(latency,86,11),W-111,y+33,11,latencyColor,true);
                     if(selected)ink(c,"✓",W-45,y+57,23,GREEN,true);
                     else ink(c,"›",W-47,y+61,23,MUTED,false);
@@ -789,7 +806,7 @@ public final class MainActivity extends Activity {
                 }
             }
             c.restore();
-            ink(c,locationMode==0?"* VPN Gate directory-reported delay":locationMode==1?"Source country is unverified; delay is TCP":"Telegram confirms MTProto proxy after selection",
+            ink(c,locationMode==0?"TCP measured on phone; UDP latency unknown":locationMode==1?"TCP ping is not VPN authentication":"Telegram requires a separate protocol handshake",
                 26,H-88,10,MUTED,false);
         }
         void stats(Canvas c){
@@ -797,17 +814,25 @@ public final class MainActivity extends Activity {
             ink(c,"Tunnel diagnostics · accurate state",25,165,12,MUTED,false);
             card(c,21,191,W-42,129,24,0xf2ffffff);
             ink(c,"Current status",43,231,13,MUTED,false);
-            ink(c,isConnecting()?"Starting secure tunnel":isTunnelOn()?
-                (SingVpnService.verifiedRoute?"Route verified":"Tunnel active"):"Disconnected",
-                43,265,22,isTunnelOn()?GREEN:INK,true);
-            ink(c,"A tunnel alone does not guarantee a reachable proxy.",43,296,11,MUTED,false);
+            ink(c,isConnecting()?"Connecting":isTunnelOn()?
+                (SingVpnService.verifiedRoute?"VPN route checked":"Tunnel active"):"Disconnected",
+                43,265,21,isTunnelOn()?GREEN:INK,true);
+            ink(c,"Session "+uptime()+"  ·  "+(preferNative?"Native VPN":"OpenVPN client"),43,296,11,MUTED,false);
             card(c,21,336,W-42,135,24,0xf2ffffff);
             ink(c,"Downstream",43,372,13,MUTED,false);ink(c,rate(downMbps)+" Mbps",W-156,372,18,INK,true);
             ink(c,"Upstream",43,424,13,MUTED,false);ink(c,rate(upMbps)+" Mbps",W-156,424,18,INK,true);
-            ink(c,"Approximate app UID traffic · not a speed test",30,500,12,MUTED,false);
+            ink(c,vpn.state==VpnController.State.ON?
+                "External OpenVPN: traffic counters unavailable":
+                "Approximate app UID traffic · not a speed test",30,500,12,MUTED,false);
             card(c,21,526,W-42,65,18,0xe9ffffff);
-            ink(c,"Network checks",42,553,14,INK,true);
-            ink(c,"Refresh  ·  Test reachability from Locations",42,575,11,MUTED,false);
+            ink(c,"Measured latency",42,552,14,INK,true);
+            String ping="Select a server in Locations";
+            if(!paidMode&&!preferNative&&!servers.isEmpty()){
+                FreeDirectory.Node node=servers.get(Math.min(selectedIndex,servers.size()-1));
+                ping=openProbe.label(node);
+            }else if(preferNative&&!smartNative&&!chosenNative().isEmpty())
+                ping=hubPanel.delay(chosenNative())+" (TCP only)";
+            ink(c,cut(ping,(int)(W-90),12),42,576,12,MUTED,false);
         }
         void backup(Canvas c){
             ink(c,"Backup connection",24,137,28,INK,true);
@@ -827,7 +852,7 @@ public final class MainActivity extends Activity {
         }
         void navbar(Canvas c){
             float y=H-75;
-            card(c,0,y,W,86,27,0xf5ffffff);
+            card(c,0,y,W,86,27,0xb9ffffff);
             String[] labels={"Home","Locations","Stats","Backup"};
             String[] symbols={"⌂","◎","▥","◇"};
             for(int i=0;i<4;i++){
@@ -898,7 +923,13 @@ public final class MainActivity extends Activity {
                         }
                         return true;
                     }
-                    if(y>222&&y<271){refreshAll();return true;}
+                    if(y>222&&y<271){
+                        if(locationMode==0){
+                            if(!openProbe.busy)openProbe.run(servers,()->invalidate());
+                            Toast.makeText(MainActivity.this,"Checking OpenVPN TCP ports…",Toast.LENGTH_SHORT).show();
+                        }else refreshAll();
+                        return true;
+                    }
                     if(locationMode==1&&y>274&&y<315){countryPicker();return true;}
                     if(scrolling&&Math.abs(y-downY)>12){scrolling=false;return true;}
                     if(y>=(locationMode==1?320:280)&&y<H-95){
