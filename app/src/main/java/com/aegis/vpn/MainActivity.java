@@ -356,17 +356,26 @@ public final class MainActivity extends Activity {
         int locationMode=0;boolean dragging,scrolling,wasOn;
         float knobProgress=0,pageAlpha=1;
         final android.animation.ValueAnimator ambient=android.animation.ValueAnimator.ofFloat(0,1);
+        private long lastAmbientFrame=0;
+        private Shader warmShader,greenShader,footerShader;
+        private float cachedW=-1,cachedH=-1;
         android.animation.ValueAnimator slide,page;
         Bitmap shield;
         Screen(){
             super(MainActivity.this);
-            setLayerType(View.LAYER_TYPE_SOFTWARE,null);
+            // Use GPU-accelerated Canvas. Software layers caused full-screen redraw jank.
             shield=BitmapFactory.decodeResource(getResources(),R.drawable.app_icon);
             ambient.setDuration(2400);
             ambient.setRepeatCount(android.animation.ValueAnimator.INFINITE);
             ambient.setRepeatMode(android.animation.ValueAnimator.REVERSE);
             ambient.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
-            ambient.addUpdateListener(a->{phase=(float)a.getAnimatedValue();invalidate();});
+            ambient.addUpdateListener(a->{
+                phase=(float)a.getAnimatedValue();
+                long now=android.os.SystemClock.uptimeMillis();
+                if(tab==0&&(isConnecting()||isTunnelOn())&&now-lastAmbientFrame>33){
+                    lastAmbientFrame=now;postInvalidateOnAnimation();
+                }
+            });
             wasOn=isTunnelOn();knobProgress=wasOn?1:0;
         }
         @Override protected void onAttachedToWindow(){super.onAttachedToWindow();ambient.start();}
@@ -414,7 +423,7 @@ public final class MainActivity extends Activity {
         }
         void card(Canvas c,float x,float y,float w,float h,float radius,int color){
             p.setShader(null);p.setStyle(Paint.Style.FILL);p.setColor(color);
-            p.setShadowLayer(14,0,7,0x11000000);c.drawRoundRect(x,y,x+w,y+h,radius,radius,p);p.clearShadowLayer();
+            c.drawRoundRect(x,y,x+w,y+h,radius,radius,p);
             p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(.8f);p.setColor(0xcaffffff);
             c.drawRoundRect(x+.5f,y+.5f,x+w-.5f,y+h-.5f,radius,radius,p);p.setStyle(Paint.Style.FILL);
         }
@@ -437,12 +446,17 @@ public final class MainActivity extends Activity {
             raw.save();raw.scale(density,density);
             Canvas c=raw;c.drawColor(0xfffcfcfa);
             boolean on=isTunnelOn();
-            p.setShader(new RadialGradient(W*.84f,H*.32f,W*.84f,
-                new int[]{on?0x954ef3b4:0x82ffb965,0x15fff5dc,0x00ffffff},null,Shader.TileMode.CLAMP));
-            c.drawRect(0,0,W,H,p);p.setShader(null);
-            p.setShader(new RadialGradient(W*.01f,H*.84f,W*.94f,
-                new int[]{on?0x4984f2ca:0x40ffcbaa,0x00ffffff},null,Shader.TileMode.CLAMP));
-            c.drawRect(0,0,W,H,p);p.setShader(null);
+            if(cachedW!=W||cachedH!=H){
+                cachedW=W;cachedH=H;
+                warmShader=new RadialGradient(W*.84f,H*.32f,W*.84f,
+                    new int[]{0x82ffb965,0x15fff5dc,0x00ffffff},null,Shader.TileMode.CLAMP);
+                greenShader=new RadialGradient(W*.84f,H*.32f,W*.84f,
+                    new int[]{0x954ef3b4,0x15f7fff5,0x00ffffff},null,Shader.TileMode.CLAMP);
+                footerShader=new RadialGradient(W*.01f,H*.84f,W*.94f,
+                    new int[]{0x40ffcbaa,0x00ffffff},null,Shader.TileMode.CLAMP);
+            }
+            p.setShader(on?greenShader:warmShader);c.drawRect(0,0,W,H,p);
+            p.setShader(footerShader);c.drawRect(0,0,W,H,p);p.setShader(null);
             for(int i=0;i<3;i++){
                 Path path=new Path();float offset=i*75+phase*12;
                 path.moveTo(W+30,-95+offset);
@@ -482,8 +496,7 @@ public final class MainActivity extends Activity {
                 c.drawCircle(cx,cy,95+ring*17+((connecting||on)?phase*7:0),p);
             }
             p.setStyle(Paint.Style.FILL);
-            p.setShadowLayer(23,0,12,on?0x4400c48a:0x44ffa452);
-            gradient(c,x,sy,sw,sh,48,main,deep);p.clearShadowLayer();
+            gradient(c,x,sy,sw,sh,48,main,deep);
             // iOS-like inner specular glass glow.
             p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(2.5f);p.setColor(0xb9ffffff);
             c.drawRoundRect(x+2,sy+2,x+sw-2,sy+sh-2,46,46,p);
@@ -496,7 +509,8 @@ public final class MainActivity extends Activity {
             float offset=Math.max(-travel,Math.min(travel,dragOffset));
             float knobX=x+45+logical*travel+offset;
             if(connecting)knobX+=Math.sin(phase*Math.PI*2)*3;
-            p.setColor(0xfffcfffd);p.setShadowLayer(14,0,6,0x50000000);c.drawCircle(knobX,cy,40,p);p.clearShadowLayer();
+            p.setColor(0x220c2824);c.drawCircle(knobX,cy+3,40,p);
+            p.setColor(0xfffcfffd);c.drawCircle(knobX,cy,40,p);
             p.setStyle(Paint.Style.STROKE);p.setColor(0xc9ffffff);p.setStrokeWidth(1);c.drawCircle(knobX,cy,38,p);p.setStyle(Paint.Style.FILL);
             if(on)ink(c,"✓",knobX-20,cy+16,51,GREEN,true);
             else drawShield(c,knobX-30,cy-30,60);
