@@ -42,7 +42,7 @@ def directory_nodes(raw):
         except (ValueError,UnicodeError,IndexError):continue
         if len(nodes)>=600:break
     if not nodes:raise ValueError("no valid OpenVPN relays in origin CSV")
-    import math,re
+    import math
     def quality(n):
         tcp=bool(re.search(r"(?im)^\\s*proto\\s+tcp",n["ovpn"]))
         return math.log1p(n["speed"]/1_000_000)*2.4+math.log1p(n["uptime"]/3600000)*.5+(2 if tcp else 0)-min(n["ping"] or 300,600)*.004
