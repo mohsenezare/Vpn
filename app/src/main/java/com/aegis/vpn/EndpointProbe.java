@@ -1,6 +1,7 @@
 package com.aegis.vpn;
 import android.net.Uri;
 import java.net.*;
+import org.json.JSONObject;
 import java.util.*;
 import java.util.concurrent.*;
 final class EndpointProbe {
@@ -9,21 +10,37 @@ final class EndpointProbe {
  void test(List<FeedParser.Entry> entries,Runnable done){
   if(busy)return;busy=true;
   new Thread(()->{
-   ExecutorService pool=Executors.newFixedThreadPool(5);
+   ExecutorService pool=Executors.newFixedThreadPool(8);
    List<Callable<Void>> jobs=new ArrayList<>();
-   for(FeedParser.Entry e:entries.subList(0,Math.min(40,entries.size())))jobs.add(()->{
+   // Probe a broad sample. This only checks a TCP handshake, not VPN auth.
+   // Smart mode will still use sing-box URLTest for real outbound HTTP reachability.
+   LinkedHashMap<String,FeedParser.Entry> unique=new LinkedHashMap<>();
+   for(FeedParser.Entry e:entries){
     try{
-     Uri uri=Uri.parse(e.value);String host;int port;
-     if(e.kind.equals("PROXY")){host=uri.getQueryParameter("server");port=Integer.parseInt(uri.getQueryParameter("port"));}
-     else{host=uri.getHost();port=uri.getPort();}
+     String host;
+     if(e.kind.equals("PROXY"))host=Uri.parse(e.value).getQueryParameter("server");
+     else host=SingBoxConfig.outbound(e.value).getString("server");
+     if(host!=null&&!host.isEmpty())unique.putIfAbsent(host+":"+e.kind,e);
+    }catch(Exception ignored){}
+   }
+   for(FeedParser.Entry e:new ArrayList<>(unique.values()).subList(0,Math.min(120,unique.size())))jobs.add(()->{
+    try{
+     String host;int port;
+     if(e.kind.equals("PROXY")){
+      Uri uri=Uri.parse(e.value);
+      host=uri.getQueryParameter("server");port=Integer.parseInt(uri.getQueryParameter("port"));
+     }else{
+      JSONObject config=SingBoxConfig.outbound(e.value);
+      host=config.getString("server");port=config.getInt("server_port");
+     }
      if(host==null||port<1||port>65535)return null;
      InetAddress address=InetAddress.getByName(host);
      if(address.isAnyLocalAddress()||address.isLoopbackAddress()||address.isLinkLocalAddress()||address.isSiteLocalAddress()||address.isMulticastAddress())return null;
      long start=android.os.SystemClock.elapsedRealtime();
-     try(Socket socket=new Socket()){socket.connect(new InetSocketAddress(address,port),1800);latency.put(e.value,android.os.SystemClock.elapsedRealtime()-start);}
+     try(Socket socket=new Socket()){socket.connect(new InetSocketAddress(address,port),1500);latency.put(e.value,android.os.SystemClock.elapsedRealtime()-start);}
     }catch(Exception ex){latency.put(e.value,-1L);}return null;
    });
-   try{pool.invokeAll(jobs,25,TimeUnit.SECONDS);}catch(InterruptedException ex){Thread.currentThread().interrupt();}
+   try{pool.invokeAll(jobs,32,TimeUnit.SECONDS);}catch(InterruptedException ex){Thread.currentThread().interrupt();}
    finally{pool.shutdownNow();busy=false;new android.os.Handler(android.os.Looper.getMainLooper()).post(done);}
   },"endpoint-probe").start();
  }
