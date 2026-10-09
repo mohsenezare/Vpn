@@ -525,14 +525,14 @@ public final class MainActivity extends Activity {
             p.setStyle(Paint.Style.STROKE);p.setColor(0xc9ffffff);p.setStrokeWidth(1);c.drawCircle(knobX,cy,38,p);p.setStyle(Paint.Style.FILL);
             if(on)ink(c,"✓",knobX-20,cy+16,51,GREEN,true);
             else drawShield(c,knobX-30,cy-30,60);
-            if(on)ink(c,"Connected",x+24,cy+6,21,0xffffffff,true);
+            if(on)ink(c,SingVpnService.verifiedRoute?"Connected":"Tunnel active",x+24,cy+6,20,0xffffffff,true);
             else ink(c,connecting?"Connecting…":"Slide to connect",x+107,cy+6,18,0xffffffff,true);
             if(connecting){
                 p.setStrokeWidth(3);p.setStyle(Paint.Style.STROKE);p.setColor(0xdfffffff);
                 c.drawArc(x-4,sy-4,x+sw+4,sy+sh+4,phase*360,115,false,p);
                 p.setStyle(Paint.Style.FILL);
             }
-            center(c,on?"Tunnel active · verifying live route":
+            center(c,on?(SingVpnService.verifiedRoute?"Live route passed HTTP check":"Tunnel active · route check pending"):
                 connecting?"Establishing your secure connection":"Slide or tap the glowing button",
                 W/2,sy+sh+32,11.5f,on?0xff288e6e:MUTED,false);
             // Clear separation between Smart refresh and manual selection.
@@ -607,7 +607,9 @@ public final class MainActivity extends Activity {
                 ink(c,"Tap update or import a configuration",32,locationMode==1?397:347,12,MUTED,false);
             }else{
                 List<FeedParser.Entry> entries=locationMode==0?Collections.emptyList():chosenEntries();
-                for(int i=0;i<count;i++){
+                int first=Math.max(0,(int)(listOffset/step)-1);
+                int last=Math.min(count,first+(int)Math.ceil((bottom-top)/step)+3);
+                for(int i=first;i<last;i++){
                     float y=top+i*step-listOffset;
                     if(y+73<top||y>bottom)continue;
                     card(c,21,y+3,W-42,72,20,0xf2ffffff);
@@ -649,7 +651,8 @@ public final class MainActivity extends Activity {
             ink(c,"Tunnel diagnostics · accurate state",25,165,12,MUTED,false);
             card(c,21,191,W-42,129,24,0xf2ffffff);
             ink(c,"Current status",43,231,13,MUTED,false);
-            ink(c,isConnecting()?"Starting secure tunnel":isTunnelOn()?"Tunnel active":"Disconnected",
+            ink(c,isConnecting()?"Starting secure tunnel":isTunnelOn()?
+                (SingVpnService.verifiedRoute?"Route verified":"Tunnel active"):"Disconnected",
                 43,265,22,isTunnelOn()?GREEN:INK,true);
             ink(c,"A tunnel alone does not guarantee a reachable proxy.",43,296,11,MUTED,false);
             card(c,21,336,W-42,135,24,0xf2ffffff);
