@@ -78,6 +78,17 @@ public final class VpnController {
         if(result!=Activity.RESULT_OK)fail("VPN permission not granted.");
         else beginAuthorized();
     }
+    /** User-requested server switch. Disconnect the old remote session first,
+     * then begin the replacement without requiring a second tap. */
+    void replace(String ovpn){
+        if(ovpn==null||ovpn.length()<80)return;
+        if(state==State.OFF){connect(ovpn);return;}
+        timer.removeCallbacks(timeout);
+        try{if(remote!=null)remote.disconnect();}catch(Exception ignored){}
+        requesting=false;pending=null;state=State.OFF;changed.run();
+        // Allow the OpenVPN client to release Android's single active VPN tunnel.
+        timer.postDelayed(()->connect(ovpn),400);
+    }
     void disconnect(){
         timer.removeCallbacks(timeout);
         try{if(remote!=null)remote.disconnect();}catch(Exception ignored){}
