@@ -36,3 +36,12 @@ No embedded V2Ray or NapsternetV engine is included in 0.4. OpenVPN still uses O
 - Optional endpoint testing measures TCP reachability for up to 40 configs/proxies on the phone and sorts measured results first. It is NOT a protocol handshake, speed test or proof of a working VPN; VMess and encoded Shadowsocks remain untested by this probe. OpenVPN connections time out visibly after 60 seconds.
 
 Public Telegram links/file-post references are also mirrored by GitHub Actions every four hours (best effort). The app falls back to this GitHub mirror when Telegram previews are blocked, retains original update times and rejects mirrors older than 72 hours. The collector never logs private account profiles or credentials, and failure retains earlier files. Workflow schedules may be delayed or disabled by GitHub for inactive repositories.
+
+## 0.4.1 smart refresh and layout fix
+
+- The home screen now provides an accessible **Smart update · select best** action above the bottom navigation instead of hiding the connection library below it.
+- One action refreshes both the VPN Gate OpenVPN directory and the V2Ray / Telegram / NapsternetV public configuration feeds; its completion screen reports counts and failures.
+- After a successful free-directory refresh, free mode selects the server with the lowest **VPN Gate reported** ping. This is not a measured OpenVPN handshake, actual throughput, or proof that the server will work on the user's network. Existing purchased OpenVPN profiles are never replaced by this selection.
+- Requests made while a source refresh is already running now receive a completion callback instead of silently being ignored.
+- **Not yet supported:** in-app Telegram account login, independent V2Ray / NapsternetV VPN tunnels, automatic VPN-protocol failover, guaranteed connectivity. Install the separate supported clients where indicated.
+- GitHub Actions builds a **debug APK**. CI and physical-device tests must pass before treating this release as verified.
