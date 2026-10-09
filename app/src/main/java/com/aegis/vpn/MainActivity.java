@@ -103,6 +103,7 @@ public final class MainActivity extends Activity {
         });
         screen=new Screen();
         setContentView(screen);
+        if(!servers.isEmpty())openProbe.run(servers,()->screen.invalidate());
         hub=new SourceHub(this);hubPanel=new HubPanel(this,hub);
         IntentFilter nativeFilter=new IntentFilter(SingVpnService.ACTION_STATUS);
         if(Build.VERSION.SDK_INT>=33)registerReceiver(nativeEvents,nativeFilter,Context.RECEIVER_NOT_EXPORTED);
