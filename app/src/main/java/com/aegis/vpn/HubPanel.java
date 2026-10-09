@@ -96,6 +96,7 @@ final class HubPanel {
    row(body,"Import configurations","Paste share link, file, or HTTPS subscription",0xff4478d6,()->{d.dismiss();importMenu();});
    row(body,"Refresh all sources","Public sources · keeps your manual choice",0xfff67b32,()->{d.dismiss();activity.refreshAll();});
    row(body,"Source health / diagnostics","Show last valid updates and errors",0xff81929a,()->{d.dismiss();activity.info(hub.report());});
+   row(body,"Settings","OpenVPN account, app preferences and security",0xff738192,()->{d.dismiss();activity.showSettings();});
   });
  }
  List<FeedParser.Entry> entries(String kind){
@@ -255,14 +256,47 @@ final class HubPanel {
   });
  }
  void napsterEntry(String link){
-  new GlassDialog.Builder(activity).setTitle("NapsternetV post")
-    .setMessage("This public item is only a post reference, not the actual config bytes. Aegis cannot decrypt a private .npv file from a preview.")
-    .setPositiveButton("Copy post link",(d,w)->{
-     ((android.content.ClipboardManager)activity.getSystemService(Context.CLIPBOARD_SERVICE))
-       .setPrimaryClip(ClipData.newPlainText("Public post",link));
-     Toast.makeText(activity,"Link copied",Toast.LENGTH_SHORT).show();
-    }).setNeutralButton("Import file",(d,w)->activity.pickConfigFile())
-    .setNegativeButton("Close",null).show();
+  sheet("NapsternetV · recent post","Public post only · Aegis reads its text without signing into Telegram",(body,d)->{
+   row(body,"Read available configuration","Check post for usable VLESS, VMess, Trojan, SS or HY2 links",0xffd850a1,()->{
+    d.dismiss();readNapsterPost(link);
+   });
+   row(body,"Import a local file","Only readable share links and text subscriptions are supported",0xffaf6ced,()->{
+    d.dismiss();activity.pickConfigFile();
+   });
+   row(body,"Copy original post URL","Encrypted proprietary .npv attachments cannot be decoded",MUTED,()->{
+    android.content.ClipboardManager clip=(android.content.ClipboardManager)activity.getSystemService(Context.CLIPBOARD_SERVICE);
+    clip.setPrimaryClip(ClipData.newPlainText("NPV post",link));
+    Toast.makeText(activity,"Source link copied",Toast.LENGTH_SHORT).show();
+   });
+  });
+ }
+ void readNapsterPost(String link){
+  long id=FeedParser.postId(link);
+  if(id<0){activity.info("Invalid post ID");return;}
+  Toast.makeText(activity,"Checking latest public post text…",Toast.LENGTH_SHORT).show();
+  new Thread(()->{
+   try{
+    // Public Telegram preview. We do not download or execute proprietary attachments.
+    String page=SourceHub.get("https://t.me/s/npv_iran?before="+(id+1));
+    String mark="data-post=\\\"npv_iran/"+id+"\\\"";
+    int start=page.indexOf(mark);
+    if(start<0)throw new Exception("The post is not currently available in the public preview.");
+    int end=page.indexOf("data-post=",start+mark.length());
+    String section=page.substring(start,end<0?Math.min(page.length(),start+45000):end);
+    List<FeedParser.Entry> entries=FeedParser.parse(section,link);
+    int imported=0;
+    for(FeedParser.Entry e:entries){
+     if(e.kind.equals("V2RAY")&&SingBoxConfig.supported(e.value)){
+      vault.put("V2RAY",e.value);imported++;
+     }
+    }
+    final int count=imported;
+    activity.runOnUiThread(()->{
+     if(count>0){Toast.makeText(activity,count+" compatible configs added",Toast.LENGTH_LONG).show();list("V2RAY");}
+     else activity.info("This recent post contains no readable supported configuration. Proprietary .npv attachments cannot be converted without their decoder.");
+    });
+   }catch(Exception e){activity.runOnUiThread(()->activity.info("Post preview unavailable: "+e.getMessage()));}
+  },"napster-preview").start();
  }
  void importMenu(){
   sheet("Import to Aegis","Locally encrypted · no credentials sent to Aegis servers",(body,d)->{
