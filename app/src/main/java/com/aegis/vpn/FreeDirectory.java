@@ -59,7 +59,7 @@ final class FreeDirectory {
         if(!m.find())return null;
         int port=parsePing(m.group(2));
         if(port<1||port>65535)return null;
-        return new java.net.InetSocketAddress(m.group(1),port);
+        return java.net.InetSocketAddress.createUnresolved(m.group(1),port);
     }
     static double rating(Node n){
         // Publisher speed is in bit/s; neither this nor publisher ping
