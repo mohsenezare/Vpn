@@ -9,6 +9,25 @@ final class FeedParser {
   Entry(String k,String v,String s){kind=k;value=v;source=s;}
  }
  static String decode(String s){return s.replace("&amp;","&").replace("&#38;","&").replace("&quot;","\"").replace("&#39;","'").replace("&lt;","<").replace("&gt;",">");}
+ /** Parse the latest three *public channel posts*, not encrypted .npv bytes. */
+ static long postId(String v){
+  try{return Long.parseLong(v.substring(v.lastIndexOf('/')+1).replaceAll("[^0-9].*$",""));}
+  catch(Exception ignored){return -1;}
+ }
+ static List<Entry> latestNapster(String html,String channel,int count){
+  LinkedHashMap<Long,Entry> posts=new LinkedHashMap<>();
+  Matcher m=Pattern.compile("data-post=\\\""+Pattern.quote(channel)+"/([0-9]+)\\\"",Pattern.CASE_INSENSITIVE).matcher(html);
+  while(m.find()){
+   try{
+    long id=Long.parseLong(m.group(1));
+    String url="https://t.me/"+channel+"/"+id;
+    posts.put(id,new Entry("NAPSTERNETV",url,"https://t.me/s/"+channel));
+   }catch(Exception ignored){}
+  }
+  ArrayList<Entry> sorted=new ArrayList<>(posts.values());
+  sorted.sort((a,b)->Long.compare(postId(b.value),postId(a.value)));
+  return new ArrayList<>(sorted.subList(0,Math.min(Math.max(0,count),sorted.size())));
+ }
  static List<Entry> parse(String body,String source){
   LinkedHashMap<String,Entry> result=new LinkedHashMap<>();
   String text=decode(body);
