@@ -33,10 +33,7 @@ public final class SingVpnService extends VpnService {
     private volatile boolean stopping;
     private volatile String currentConfig;
     private ScheduledExecutorService watchdog;
-    private final AtomicBoolean restarting=new AtomicBoolean(false);
-    private int failedHealthChecks=0,restarts=0;
-    private volatile boolean everVerified=false;
-    private long lastRecoveryAt=0;
+    private int failedHealthChecks=0;
     public static volatile boolean verifiedRoute=false;
     @Override public void onCreate(){
         super.onCreate();
@@ -46,8 +43,11 @@ public final class SingVpnService extends VpnService {
     @Override public int onStartCommand(Intent intent,int flags,int startId){
         if(intent==null)return START_NOT_STICKY;
         if(ACTION_STOP.equals(intent.getAction())){
-            stopping=true;stopWatchdog();currentConfig=null;
-            worker.execute(()->{cleanup();state=OFF;verifiedRoute=false;broadcast();stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();});
+            // Publish OFF immediately even if native startup is still on the worker.
+            // The queued cleanup closes the TUN once the worker returns.
+            stopping=true;currentConfig=null;stopWatchdog();
+            state=OFF;verifiedRoute=false;broadcast();
+            worker.execute(()->{cleanup();stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();});
             return START_NOT_STICKY;
         }
         if(!ACTION_START.equals(intent.getAction()))return START_NOT_STICKY;
@@ -111,7 +111,7 @@ public final class SingVpnService extends VpnService {
         if(watchdog!=null&&!watchdog.isShutdown())return;
         watchdog=Executors.newSingleThreadScheduledExecutor();
         watchdog.scheduleWithFixedDelay(()->{
-            if(stopping||state!=TUNNEL_ACTIVE||restarting.get())return;
+            if(stopping||state!=TUNNEL_ACTIVE)return;
             try{
                 ConnectivityManager cm=(ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
                 Network vpnNetwork=null;
@@ -125,23 +125,12 @@ public final class SingVpnService extends VpnService {
                 if(vpnNetwork==null)return;
                 boolean good=checkRoute(vpnNetwork,"https://www.gstatic.com/generate_204",204)||
                     checkRoute(vpnNetwork,"https://www.cloudflare.com/cdn-cgi/trace",200);
-                if(good){failedHealthChecks=0;verifiedRoute=true;everVerified=true;return;}
+                if(good){failedHealthChecks=0;verifiedRoute=true;return;}
                 verifiedRoute=false;
+                // Do NOT tear down a functioning sing-box session solely because a
+                // captive/filtered network blocked these particular probe URLs.
+                // URLTest will try alternate proxy outbounds without resetting the TUN.
                 failedHealthChecks++;
-                if(!everVerified||failedHealthChecks<3||restarts>=4||
-                    android.os.SystemClock.elapsedRealtime()-lastRecoveryAt<90000L)return;
-                if(!restarting.compareAndSet(false,true))return;
-                lastRecoveryAt=android.os.SystemClock.elapsedRealtime();
-                restarts++;failedHealthChecks=0;
-                worker.execute(()->{
-                    try{
-                        if(!stopping&&currentConfig!=null){
-                            state=STARTING;lastError="Route check failed · restarting VPN core";
-                            broadcast();updateNotification("Reconnecting · trying alternate proxy");
-                            startCore(currentConfig);
-                        }
-                    }finally{restarting.set(false);}
-                });
             }catch(Exception e){Log.w("AegisSingBox","Health check skipped",e);}
         },22,15,TimeUnit.SECONDS);
     }
@@ -157,7 +146,7 @@ public final class SingVpnService extends VpnService {
     }
     private void stopWatchdog(){
         if(watchdog!=null){watchdog.shutdownNow();watchdog=null;}
-        failedHealthChecks=0;verifiedRoute=false;everVerified=false;
+        failedHealthChecks=0;verifiedRoute=false;
     }
     private android.app.Notification notification(String status){
         Intent open=new Intent(this,MainActivity.class);
