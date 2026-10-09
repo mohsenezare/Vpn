@@ -25,6 +25,12 @@ def refresh(channel):
         for post,content in re.findall(r'data-post="([A-Za-z0-9_]+/[0-9]+)"(.*?)(?=data-post="|\Z)',body,re.S):
             if post.split('/')[0].lower()==channel.lower() and re.search(r'\.npv[st4]?',content,re.I):
                 v='https://t.me/'+post;entries[v]={'k':'NAPSTERNETV','v':v}
+        # Exactly the three newest public npv_iran posts, including text-only posts.
+        # A post URL is metadata, never usable encrypted NPV config bytes.
+        if channel=='npv_iran':
+            post_ids={int(pid) for pid in re.findall(r'data-post="npv_iran/([0-9]+)"',body,re.I)}
+            entries={'https://t.me/npv_iran/'+str(pid):{'k':'NAPSTERNETV','v':'https://t.me/npv_iran/'+str(pid)}
+                     for pid in sorted(post_ids,reverse=True)[:3]}
         if not entries:raise ValueError('no supported public entries')
         data={'updated':int(time.time()*1000),'entries':list(entries.values())[:350]}
         (root/(channel+'.json')).write_text(json.dumps(data,ensure_ascii=False),encoding='utf-8')
