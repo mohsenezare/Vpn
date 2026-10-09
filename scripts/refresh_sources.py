@@ -1,14 +1,7 @@
-"""Mirror only public connection links and file-post references, never account data."""
+"""Mirror public standard VPN/MTProto share links only; no NPV attachments."""
 import concurrent.futures, html, json, pathlib, re, time, urllib.request
-CHANNELS = ['net_azad','proxyplus','irovpn','mtproto021','netmeli_ir','npv_iran','proxy_netmeli','onevpn','iproxy2','myconfig','miticonfig','proxyrp','mitivpn']
+CHANNELS = ['net_azad','proxyplus','irovpn','mtproto021','netmeli_ir','proxy_netmeli','onevpn','iproxy2','myconfig','miticonfig','proxyrp']
 root=pathlib.Path('feeds');root.mkdir(exist_ok=True)
-for channel in CHANNELS:
-    f=root/(channel+'.json')
-    if f.exists():
-        old=json.loads(f.read_text())
-        rows=old.get('entries',[])
-        if rows and all(e.get('k')=='NAPSTERNETV' and not e.get('v','').lower().startswith('https://t.me/'+channel.lower()+'/') for e in rows):
-            f.write_text(json.dumps({'updated':0,'entries':[]}))
 def refresh(channel):
     try:
         req=urllib.request.Request('https://t.me/s/'+channel,headers={'User-Agent':'Mozilla/5.0'})
@@ -22,20 +15,6 @@ def refresh(channel):
             if kind=='PROXY' and not all(x in v for x in ('server=','port=','secret=')):continue
             entries[v]={'k':kind,'v':v}
             if len(entries)>=300:break
-        for post,content in re.findall(r'data-post="([A-Za-z0-9_]+/[0-9]+)"(.*?)(?=data-post="|\Z)',body,re.S):
-            if post.split('/')[0].lower()==channel.lower() and re.search(r'\.npv[st4]?',content,re.I):
-                v='https://t.me/'+post;entries[v]={'k':'NAPSTERNETV','v':v}
-        # Exactly the three newest public npv_iran posts, including text-only posts.
-        # A post URL is metadata, never usable encrypted NPV config bytes.
-        if channel=='npv_iran':
-            post_ids={int(pid) for pid in re.findall(r'data-post="npv_iran/([0-9]+)"',body,re.I)}
-            entries={'https://t.me/npv_iran/'+str(pid):{'k':'NAPSTERNETV','v':'https://t.me/npv_iran/'+str(pid)}
-                     for pid in sorted(post_ids,reverse=True)[:3]}
-        if channel=='mitivpn':
-            # Keep only the three newest public NPV attachment post references.
-            valid=[e for e in entries.values() if e.get('k')=='NAPSTERNETV']
-            valid.sort(key=lambda item:int(item['v'].rsplit('/',1)[-1]),reverse=True)
-            entries={item['v']:item for item in valid[:3]}
         if not entries:raise ValueError('no supported public entries')
         data={'updated':int(time.time()*1000),'entries':list(entries.values())[:350]}
         (root/(channel+'.json')).write_text(json.dumps(data,ensure_ascii=False),encoding='utf-8')
