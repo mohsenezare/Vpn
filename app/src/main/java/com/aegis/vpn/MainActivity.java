@@ -26,6 +26,16 @@ public final class MainActivity extends Activity {
     private HubPanel hubPanel;
     private int tab=0, selectedIndex=0;
     private boolean paidMode=false;
+    private boolean preferNative=true;
+    private String pendingNativeConfig;
+    private static final int PREPARE_NATIVE=8292;
+    private final BroadcastReceiver nativeEvents=new BroadcastReceiver(){
+        @Override public void onReceive(Context context,Intent intent){
+            if(screen!=null)screen.invalidate();
+            if(intent.getIntExtra("state",0)==SingVpnService.FAILED)
+                info("Embedded VPN error: "+intent.getStringExtra("message"));
+        }
+    };
     boolean updatingAll=false;
     private String error="";
     private ArrayList<FreeDirectory.Node> servers=new ArrayList<>();
@@ -40,6 +50,7 @@ public final class MainActivity extends Activity {
         directory=new FreeDirectory(this);
         servers=directory.load();
         paidMode=getPreferences(MODE_PRIVATE).getBoolean("paid_mode",false);
+        preferNative=getPreferences(MODE_PRIVATE).getBoolean("prefer_native",true);
         selectedIndex=getPreferences(MODE_PRIVATE).getInt("selected",0);
         vpn=new VpnController(this, () -> screen.invalidate(), msg -> {
             new GlassDialog.Builder(this).setTitle("OpenVPN").setMessage(msg).setPositiveButton("OK",null).show();
@@ -48,13 +59,25 @@ public final class MainActivity extends Activity {
         screen=new Screen();
         setContentView(screen);
         hub=new SourceHub(this);hubPanel=new HubPanel(this,hub);
+        IntentFilter nativeFilter=new IntentFilter(SingVpnService.ACTION_STATUS);
+        if(Build.VERSION.SDK_INT>=33)registerReceiver(nativeEvents,nativeFilter,Context.RECEIVER_NOT_EXPORTED);
+        else registerReceiver(nativeEvents,nativeFilter);
         RefreshJob.schedule(this);
-        if(hub.stale())hub.refresh(()->{});
+        if(hub.stale())hub.refresh(()->screen.invalidate());
         if(directory.isStale()) refresh(false);
     }
-    @Override protected void onDestroy(){vpn.close();super.onDestroy();}
+    @Override protected void onDestroy(){
+        try{unregisterReceiver(nativeEvents);}catch(Exception ignored){}
+        vpn.close();super.onDestroy();
+    }
     @Override @Deprecated protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
+        if(request==PREPARE_NATIVE){
+            if(result==RESULT_OK&&pendingNativeConfig!=null){
+                String config=pendingNativeConfig;pendingNativeConfig=null;startNativeService(config);
+            }else{pendingNativeConfig=null;info("VPN permission was not granted.");}
+            return;
+        }
         if(request==PICK_OVPN && result==RESULT_OK && data!=null && data.getData()!=null) {
             try{
                 String ovpn=readLimited(data.getData());
@@ -135,38 +158,83 @@ public final class MainActivity extends Activity {
                 catch(Exception ex){info("Profile encryption failed: "+ex.getMessage());}
             }).show();
     }
-    void persist(){getPreferences(MODE_PRIVATE).edit().putBoolean("paid_mode",paidMode).putInt("selected",selectedIndex).apply();}
+    void persist(){getPreferences(MODE_PRIVATE).edit().putBoolean("paid_mode",paidMode)
+        .putBoolean("prefer_native",preferNative).putInt("selected",selectedIndex).apply();}
     void selectServer(){
-        if(servers.isEmpty()){info("No free servers saved. Tap Refresh to fetch volunteer nodes.");return;}
+        if(servers.isEmpty()){info("No cached free OpenVPN relay. Try embedded V2Ray or refresh the public mirror.");return;}
         String[] items=new String[Math.min(servers.size(),75)];
         for(int i=0;i<items.length;i++)items[i]=servers.get(i).title();
         new GlassDialog.Builder(this).setTitle("Free OpenVPN servers")
             .setSingleChoiceItems(items,Math.min(selectedIndex,items.length-1),(d,which)->{
-                selectedIndex=which;paidMode=false;persist();d.dismiss();screen.invalidate();
+                selectedIndex=which;paidMode=false;preferNative=false;persist();d.dismiss();screen.invalidate();
             }).setNegativeButton("Close",null).show();
     }
+    boolean hasNativeCandidates(){
+        if(hub==null)return false;
+        for(FeedParser.Entry e:hub.entries("V2RAY"))if(SingBoxConfig.supported(e.value))return true;
+        return false;
+    }
+    void connectNativeEntry(String link){
+        try{
+            String config=SingBoxConfig.build(link);
+            paidMode=false;preferNative=true;persist();
+            if(vpn.state!=VpnController.State.OFF)vpn.disconnect();
+            connectNative(config);
+        }catch(Exception ex){info("Unsupported or incomplete config: "+ex.getMessage());}
+    }
+    void connectNative(String config){
+        if(SingVpnService.state==SingVpnService.STARTING
+            ||SingVpnService.state==SingVpnService.TUNNEL_ACTIVE)return;
+        Intent auth=android.net.VpnService.prepare(this);
+        if(auth!=null){pendingNativeConfig=config;startActivityForResult(auth,PREPARE_NATIVE);}
+        else startNativeService(config);
+    }
+    void startNativeService(String config){
+        try{
+            Intent intent=new Intent(this,SingVpnService.class).setAction(SingVpnService.ACTION_START)
+                .putExtra(SingVpnService.EXTRA_CONFIG,config);
+            startForegroundService(intent);
+        }catch(Exception ex){info("Embedded VPN service could not start: "+ex.getMessage());}
+    }
+    void stopNative(){startService(new Intent(this,SingVpnService.class).setAction(SingVpnService.ACTION_STOP));}
+    boolean isTunnelOn(){return vpn.state==VpnController.State.ON||SingVpnService.state==SingVpnService.TUNNEL_ACTIVE;}
+    boolean isConnecting(){return vpn.state==VpnController.State.CONNECTING||SingVpnService.state==SingVpnService.STARTING;}
     void startVpn(){
-        if(vpn.state!=VpnController.State.OFF)return;
+        if(isTunnelOn()||isConnecting())return;
         String config=null;
         if(paidMode){
             try{config=profiles.getOpenVpnConfig();}
             catch(Exception e){info("Could not decrypt paid profile.");return;}
             if(config==null){info("Import your paid .ovpn file first.");return;}
-        } else {
-            if(servers.isEmpty()){info("No free servers. Refresh the VPN Gate directory.");return;}
+        }else if(preferNative&&hasNativeCandidates()){
+            ArrayList<FeedParser.Entry> choices=new ArrayList<>(hub.entries("V2RAY"));
+            choices.sort((a,b)->{
+                long ra=hubPanel.probe.rank(a.value),rb=hubPanel.probe.rank(b.value);
+                if(ra!=rb)return Long.compare(ra,rb);
+                return Boolean.compare(!a.value.startsWith("vless://"),!b.value.startsWith("vless://"));
+            });
+            for(FeedParser.Entry e:choices){
+                try{connectNative(SingBoxConfig.build(e.value));return;}catch(Exception ignored){}
+            }
+            info("No supported native proxy configuration was found.");return;
+        }else if(!servers.isEmpty()){
             config=servers.get(Math.min(selectedIndex,servers.size()-1)).config;
+        }else if(hasNativeCandidates()){
+            preferNative=true;persist();startVpn();return;
+        }else{
+            info("No available configuration. Tap Smart update. Public config counts are not evidence that nodes work.");return;
         }
-        vpn.connect(config);
-        screen.invalidate();
+        vpn.connect(config);screen.invalidate();
     }
     void showSettings(){
         final String[] actions={"Smart update all · choose best free server",
             "Refresh free OpenVPN servers","Choose free OpenVPN server",
             "Import paid .ovpn account","Use purchased OpenVPN account",
             "Use free VPN Gate servers","Delete saved paid account",
-            "About / security","V2Ray · Proxies · NapsternetV"};
+            "About / security","V2Ray · Proxies · NapsternetV","Use embedded V2Ray VPN"};
         new GlassDialog.Builder(this).setTitle("VPN Settings").setItems(actions,(dlg,which)->{
             if(which==8)hubPanel.open();
+            if(which==9){paidMode=false;preferNative=true;persist();screen.invalidate();}
             if(which==0)refreshAll();
             if(which==1)refresh(true);
             if(which==2)selectServer();
@@ -177,7 +245,7 @@ public final class MainActivity extends Activity {
             }
             if(which==4){if(!profiles.exists())info("Import a .ovpn file first.");
                 else{paidMode=true;persist();screen.invalidate();}}
-            if(which==5){paidMode=false;persist();screen.invalidate();}
+            if(which==5){paidMode=false;preferNative=false;persist();screen.invalidate();}
             if(which==6)new GlassDialog.Builder(this).setMessage("Delete encrypted paid OpenVPN profile?")
                 .setNegativeButton("Cancel",null).setPositiveButton("Delete",(d,w)->{profiles.clear();paidMode=false;persist();screen.invalidate();}).show();
             if(which==7)info("Connection requires the separate free 'OpenVPN for Android' app (de.blinkt.openvpn).\n"+
@@ -236,9 +304,9 @@ public final class MainActivity extends Activity {
             raw.save();raw.scale(density,density);
             Canvas c=raw;
             fill(c,0xfffbfcfc);
-            int active=vpn.state==VpnController.State.ON?GREEN:ORANGE;
+            int active=isTunnelOn()?GREEN:ORANGE;
             p.setShader(new RadialGradient(W*(.78f+phase*.17f),H*.30f,W*.87f,
-                new int[]{(vpn.state==VpnController.State.ON?0xc02ce39a:0xc0ffad47),0x00ffffff},null,Shader.TileMode.CLAMP));
+                new int[]{(isTunnelOn()?0xc02ce39a:0xc0ffad47),0x00ffffff},null,Shader.TileMode.CLAMP));
             c.drawRect(0,0,W,H,p);p.setShader(null);
             p.setShader(new RadialGradient(-W*.20f,H*.76f,W*.85f,new int[]{0x46dceee8,0x00ffffff},null,Shader.TileMode.CLAMP));
             c.drawRect(0,0,W,H,p);p.setShader(null);
@@ -274,32 +342,34 @@ public final class MainActivity extends Activity {
             p.setStyle(Paint.Style.FILL);
             card(c,x-2,sy-3,sw+4,sh+6,52,0x90ffffff,0x99ffffff);
             gradient(c,x,sy,sw,sh,48,
-                vpn.state==VpnController.State.ON?0xff00c77d: vpn.state==VpnController.State.CONNECTING?0xffffac53:0xffffab43,
-                vpn.state==VpnController.State.ON?0xff03a773: vpn.state==VpnController.State.CONNECTING?0xffff6c24:0xffff6f18);
+                isTunnelOn()?0xff00c77d: isConnecting()?0xffffac53:0xffffab43,
+                isTunnelOn()?0xff03a773: isConnecting()?0xffff6c24:0xffff6f18);
             p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(1.5f);p.setColor(0xcaffffff);
             c.drawRoundRect(x+1,sy+1,x+sw-1,sy+sh-1,48,48,p);p.setStyle(Paint.Style.FILL);
-            float knobX=(vpn.state==VpnController.State.ON)?x+sw-45+dragOffset:x+45+dragOffset;
+            float knobX=isTunnelOn()?x+sw-45+dragOffset:x+45+dragOffset;
             roundedCircle(c,knobX,sy+45,39,0xfffefefe);
-            if(vpn.state==VpnController.State.ON){
+            if(isTunnelOn()){
                 txt(c,"✓",knobX-17,sy+60,48,GREEN,true);
-                txt(c,"Connected",x+28,sy+53,20,0xffffffff,true);
+                txt(c,"Tunnel active",x+28,sy+53,18,0xffffffff,true);
             }else{
                 icon(c,knobX-27,sy+18,54);
-                txt(c,vpn.state==VpnController.State.CONNECTING?"Connecting...":"Slide to connect",
+                txt(c,isConnecting()?"Starting tunnel…":"Slide to connect",
                     x+106,sy+53,16,0xffffffff,true);
             }
-            if(vpn.state==VpnController.State.CONNECTING){p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(2);p.setColor(0xffffffff);c.drawArc(x-5,sy-5,x+sw+5,sy+sh+5,phase*360,85,false,p);p.setStyle(Paint.Style.FILL);}
-            String secondary=vpn.state==VpnController.State.ON?"✓ Your connection is protected":
-                vpn.state==VpnController.State.CONNECTING?"Establishing a secure connection":"Slide the button to connect";
-            center(c,secondary,W/2,sy+sh+37,12,vpn.state==VpnController.State.ON?0xff17895e:MUTED,false);
+            if(isConnecting()){p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(2);p.setColor(0xffffffff);c.drawArc(x-5,sy-5,x+sw+5,sy+sh+5,phase*360,85,false,p);p.setStyle(Paint.Style.FILL);}
+            String secondary=isTunnelOn()?"Tunnel established · server unverified":
+                isConnecting()?"Starting VPN engine…":"Slide the button to connect";
+            center(c,secondary,W/2,sy+sh+37,12,isTunnelOn()?0xff17895e:MUTED,false);
             float cy=serverY();
             card(c,18,cy,W-36,88,25,0xeaffffff,0xffffffff);
             roundedCircle(c,62,cy+44,23,0xffeef7f4);
             txt(c,paidMode?"★":"🌐",47,cy+54,27,ORANGE,true);
             String name=paidMode?"Private OpenVPN account":
-                (servers.isEmpty()?"No free servers":servers.get(Math.min(selectedIndex,servers.size()-1)).country);
+                preferNative&&hasNativeCandidates()?"Embedded VPN · V2Ray":
+                (servers.isEmpty()?"No free OpenVPN relay":servers.get(Math.min(selectedIndex,servers.size()-1)).country);
             String subtitle=paidMode?"Imported .ovpn profile":
-                (servers.isEmpty()?"Tap Locations to refresh":servers.get(Math.min(selectedIndex,servers.size()-1)).host);
+                preferNative&&hasNativeCandidates()?(hub.entries("V2RAY").size()+" config candidates · not validated"):
+                (servers.isEmpty()?"Tap Smart update to refresh":servers.get(Math.min(selectedIndex,servers.size()-1)).host);
             txt(c,name,98,cy+38,15,INK,true);
             txt(c,subtitle.length()>32?subtitle.substring(0,31)+"…":subtitle,98,cy+61,11,MUTED,false);
             txt(c,"›",W-49,cy+56,30,MUTED,false);
@@ -329,9 +399,9 @@ public final class MainActivity extends Activity {
             header(c);txt(c,"Statistics",24,140,32,INK,true);
             card(c,18,177,W-36,130,26,0xeaffffff,0xffffffff);
             txt(c,"Tunnel status",40,221,13,MUTED,false);
-            txt(c,vpn.state==VpnController.State.ON?"Connected":
-                vpn.state==VpnController.State.CONNECTING?"Connecting...":"Disconnected",
-                40,257,22,vpn.state==VpnController.State.ON?GREEN:INK,true);
+            txt(c,isTunnelOn()?"Tunnel active":
+                isConnecting()?"Connecting...":"Disconnected",
+                40,257,22,isTunnelOn()?GREEN:INK,true);
             card(c,18,323,W-36,150,26,0xeaffffff,0xffffffff);
             txt(c,"Download",40,368,16,MUTED,false);txt(c,"— Mbps",W-130,368,17,INK,true);
             txt(c,"Upload",40,423,16,MUTED,false);txt(c,"— Mbps",W-130,423,17,INK,true);
@@ -359,8 +429,11 @@ public final class MainActivity extends Activity {
             if(e.getAction()==MotionEvent.ACTION_UP){
                 if(dragging){
                     dragging=false;dragOffset=0;invalidate();
-                    if(vpn.state==VpnController.State.OFF && x-downX>Math.min(70,W*.25f))startVpn();
-                    else if(vpn.state==VpnController.State.ON && downX-x>Math.min(70,W*.25f))vpn.disconnect();
+                    if(!isTunnelOn()&&!isConnecting() && x-downX>Math.min(70,W*.25f))startVpn();
+                    else if(isTunnelOn()&&downX-x>Math.min(70,W*.25f)){
+                        if(SingVpnService.state==SingVpnService.TUNNEL_ACTIVE)stopNative();
+                        if(vpn.state==VpnController.State.ON)vpn.disconnect();
+                    }
                     return true;
                 }
                 if(y>H-85){tab=Math.min(2,(int)(x/W*3));invalidate();return true;}
@@ -371,7 +444,7 @@ public final class MainActivity extends Activity {
                 if(tab==1){
                     if(y>185&&y<247){refreshAll();return true;}
                     if(y>=260){int i=(int)((y-260)/76);if(i>=0&&i<servers.size()){
-                        selectedIndex=i;paidMode=false;persist();tab=0;invalidate();return true;}}
+                        selectedIndex=i;paidMode=false;preferNative=false;persist();tab=0;invalidate();return true;}}
                 }
             }
             return true;
