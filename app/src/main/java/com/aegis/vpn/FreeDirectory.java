@@ -79,9 +79,9 @@ final class FreeDirectory {
     }
     private static boolean valid(String config){
         if(config==null||config.length()<80||config.length()>75000)return false;
-        if(!config.contains("client")||!config.matches("(?s).*\\\\bremote\\\\s+[^\\\\s]+.*"))return false;
+        if(!config.contains("client")||!config.matches("(?s).*\\bremote\\s+[^\\s]+.*"))return false;
         // Public configurations must not execute scripts on the client.
-        return !java.util.regex.Pattern.compile("(?im)^\\\\s*(?:script-security|up|down|client-connect|client-disconnect|plugin)\\\\s+").matcher(config).find();
+        return !java.util.regex.Pattern.compile("(?im)^\\s*(?:script-security|up|down|client-connect|client-disconnect|plugin)\\s+").matcher(config).find();
     }
     private ArrayList<Node> parseCsv(byte[] raw,int limit) throws Exception {
         ArrayList<Node> result=new ArrayList<>();Set<String> seen=new HashSet<>();
