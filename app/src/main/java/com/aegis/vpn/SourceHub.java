@@ -45,6 +45,51 @@ final class SourceHub {
   }finally{c.disconnect();}
  }
  boolean stale(){return System.currentTimeMillis()-context.getSharedPreferences("hub",0).getLong("attempt",0)>3600000L;}
+ void refreshCategory(String kind,Runnable done){
+  final String source=kind.equals("PROXY")
+    ?"https://raw.githubusercontent.com/SoliSpirit/mtproto/master/all_proxies.txt"
+    :"https://t.me/s/mitivpn";
+  new Thread(()->{
+   try{
+    List<FeedParser.Entry> values;
+    long stamp=System.currentTimeMillis();
+    try{
+     values=FeedParser.parse(get(source),source);
+     if(kind.equals("NAPSTERNETV")){
+      values.removeIf(e->!e.kind.equals(kind));
+      values.sort((a,b)->Long.compare(FeedParser.postId(b.value),FeedParser.postId(a.value)));
+      values=new ArrayList<>(values.subList(0,Math.min(3,values.size())));
+     }
+     if(values.isEmpty())throw new IOException("Public list returned no valid "+kind+" entries");
+    }catch(Exception direct){
+     if(!kind.equals("NAPSTERNETV"))throw direct;
+     JSONObject mirror=new JSONObject(get("https://raw.githubusercontent.com/mohsenezare/Vpn/main/feeds/mitivpn.json"));
+     stamp=mirror.getLong("updated");
+     if(System.currentTimeMillis()-stamp>259200000L)throw new IOException("Public mirror is stale");
+     JSONArray cached=mirror.getJSONArray("entries");values=new ArrayList<>();
+     for(int i=0;i<cached.length();i++){
+      JSONObject e=cached.getJSONObject(i);String v=e.optString("v");
+      if(e.optString("k").equals("NAPSTERNETV")&&v.matches("https://t\\.me/mitivpn/[0-9]+"))
+       values.add(new FeedParser.Entry("NAPSTERNETV",v,source));
+     }
+     values.sort((a,b)->Long.compare(FeedParser.postId(b.value),FeedParser.postId(a.value)));
+     values=new ArrayList<>(values.subList(0,Math.min(3,values.size())));
+     if(values.isEmpty())throw new IOException("No public NPV posts in current snapshot");
+    }
+    JSONArray records=new JSONArray();
+    for(FeedParser.Entry e:values){
+     JSONObject x=new JSONObject();x.put("k",e.kind);x.put("v",e.value);records.put(x);
+    }
+    context.getSharedPreferences("hub",0).edit()
+       .putString(source,records.toString()).putLong(source+"time",stamp)
+       .putString(source+"error","").apply();
+   }catch(Exception e){
+    context.getSharedPreferences("hub",0).edit()
+       .putString(source+"error",e.getMessage()==null?"Network unavailable":e.getMessage()).apply();
+   }finally{main.post(done);}
+  },"source-quick-refresh").start();
+ }
+
  synchronized void refresh(Runnable done){
   if(done!=null)completionListeners.add(done);
   if(busy)return;
