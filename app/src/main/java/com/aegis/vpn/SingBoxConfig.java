@@ -90,7 +90,16 @@ final class SingBoxConfig {
             String sni=param(uri,"sni","serverName");
             if(!sni.isEmpty())tls.put("server_name",sni);
             String fp=param(uri,"fp","fingerprint");
-            if(!fp.isEmpty())tls.put("utls",new JSONObject().put("enabled",true).put("fingerprint",fp));
+            // REALITY requires a uTLS client hello even when fp is absent in a share link.
+            // Prevent a single malformed REALITY node from killing the entire URLTest group.
+            if(security.equals("reality")){
+                String[] known={"chrome","firefox","edge","safari","ios","android","random","randomized"};
+                boolean accepted=false;
+                for(String value:known)if(value.equalsIgnoreCase(fp))accepted=true;
+                tls.put("utls",new JSONObject().put("enabled",true)
+                    .put("fingerprint",accepted?fp.toLowerCase(Locale.ROOT):"chrome"));
+            }else if(!fp.isEmpty())tls.put("utls",new JSONObject()
+                .put("enabled",true).put("fingerprint",fp));
             if(security.equals("reality")){
                 String key=param(uri,"pbk","publicKey");
                 if(key.isEmpty())throw new IllegalArgumentException("Reality public key missing");
@@ -178,6 +187,39 @@ final class SingBoxConfig {
         return new JSONObject().put("type","shadowsocks").put("tag","proxy")
             .put("server",host).put("server_port",port)
             .put("method",head.substring(0,sep)).put("password",head.substring(sep+1));
+    }
+    /**
+     * Remove only a failing auto-group node from an invalid generated config.
+     * Engine errors use outbound[zeroBasedIndex]. Do not modify manual configs
+     * or remove urltest/direct; fail rather than silently bypassing the proxy.
+     */
+    static String dropInvalidAutoNode(String config,String error){
+        try{
+            if(error==null)return null;
+            java.util.regex.Matcher m=java.util.regex.Pattern
+                .compile("(?i)outbound\\\\[([0-9]+)\\\\]").matcher(error);
+            if(!m.find())return null;
+            int index=Integer.parseInt(m.group(1));
+            JSONObject root=new JSONObject(config);
+            JSONArray outputs=root.getJSONArray("outbounds");
+            if(index<0||index>=outputs.length())return null;
+            JSONObject bad=outputs.getJSONObject(index);
+            String tag=bad.optString("tag","");
+            if(!tag.startsWith("node-"))return null;
+            JSONArray remaining=new JSONArray();
+            for(int i=0;i<outputs.length();i++)if(i!=index)remaining.put(outputs.getJSONObject(i));
+            for(int i=0;i<remaining.length();i++){
+                JSONObject o=remaining.getJSONObject(i);
+                if(!o.optString("type").equals("urltest"))continue;
+                JSONArray candidates=o.getJSONArray("outbounds"),valid=new JSONArray();
+                for(int j=0;j<candidates.length();j++)
+                    if(!tag.equals(candidates.getString(j)))valid.put(candidates.getString(j));
+                if(valid.length()==0)return null;
+                o.put("outbounds",valid);
+            }
+            root.put("outbounds",remaining);
+            return root.toString();
+        }catch(Exception ignored){return null;}
     }
     static boolean supported(String value) {
         try{outbound(value);return true;}catch(Exception e){return false;}
