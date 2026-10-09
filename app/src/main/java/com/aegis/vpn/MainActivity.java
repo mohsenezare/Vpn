@@ -322,198 +322,359 @@ public final class MainActivity extends Activity {
               "Embedded sing-box supports selected VLESS, VMess, Trojan, Shadowsocks and Hysteria2 formats. AmneziaWG and encrypted .npv are not supported.");
         }).show();
     }
+    /** Responsive, animated Canvas UI, with touchable cards and paged scrollable locations. */
     private class Screen extends View {
-        final Paint p=new Paint(3), text=new Paint(3);
-        float density,W,H,downX,downY,dragOffset=0,phase=0;boolean dragging=false;
-        final android.animation.ValueAnimator motion=android.animation.ValueAnimator.ofFloat(0,1);
-        Bitmap icon;
+        final Paint p=new Paint(3),t=new Paint(3);
+        float density=1,W,H,downX,downY,dragOffset,phase,listOffset,scrollStart;
+        int locationMode=0;boolean dragging,scrolling,wasOn;
+        float knobProgress=0,pageAlpha=1;
+        final android.animation.ValueAnimator ambient=android.animation.ValueAnimator.ofFloat(0,1);
+        android.animation.ValueAnimator slide,page;
+        Bitmap shield;
         Screen(){
-            super(MainActivity.this);setLayerType(View.LAYER_TYPE_SOFTWARE,null);
-            icon=BitmapFactory.decodeResource(getResources(),R.drawable.app_icon);
-            density=getResources().getDisplayMetrics().density;
-            motion.setDuration(5200);motion.setRepeatCount(android.animation.ValueAnimator.INFINITE);motion.setRepeatMode(android.animation.ValueAnimator.REVERSE);motion.addUpdateListener(a->{phase=(float)a.getAnimatedValue();invalidate();});
+            super(MainActivity.this);
+            setLayerType(View.LAYER_TYPE_SOFTWARE,null);
+            shield=BitmapFactory.decodeResource(getResources(),R.drawable.app_icon);
+            ambient.setDuration(2400);
+            ambient.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+            ambient.setRepeatMode(android.animation.ValueAnimator.REVERSE);
+            ambient.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+            ambient.addUpdateListener(a->{phase=(float)a.getAnimatedValue();invalidate();});
+            wasOn=isTunnelOn();knobProgress=wasOn?1:0;
         }
-        @Override protected void onAttachedToWindow(){super.onAttachedToWindow();motion.start();}
-        @Override protected void onDetachedFromWindow(){motion.cancel();super.onDetachedFromWindow();}
-        @Override protected void onWindowVisibilityChanged(int visibility){super.onWindowVisibilityChanged(visibility);if(motion!=null){if(visibility==VISIBLE)motion.resume();else motion.pause();}}
-        void fill(Canvas c,int color){c.drawColor(color);}
-        void card(Canvas c,float x,float y,float w,float h,float r,int bg,int border){
-            p.reset();p.setAntiAlias(true);p.setStyle(Paint.Style.FILL);p.setColor(bg);
-            p.setShadowLayer(12,0,6,0x18000000);
-            c.drawRoundRect(x,y,x+w,y+h,r,r,p);p.clearShadowLayer();
-            if(border!=0){p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(1);p.setColor(border);c.drawRoundRect(x+.5f,y+.5f,x+w-.5f,y+h-.5f,r,r,p);}
+        @Override protected void onAttachedToWindow(){super.onAttachedToWindow();ambient.start();}
+        @Override protected void onDetachedFromWindow(){ambient.cancel();if(slide!=null)slide.cancel();if(page!=null)page.cancel();super.onDetachedFromWindow();}
+        @Override protected void onWindowVisibilityChanged(int v){
+            super.onWindowVisibilityChanged(v);if(v==VISIBLE&&!ambient.isStarted())ambient.start();
+            else if(v==VISIBLE)ambient.resume();else ambient.pause();
+        }
+        void animateState(){
+            boolean current=isTunnelOn();
+            if(current==wasOn)return;
+            wasOn=current;
+            if(slide!=null)slide.cancel();
+            slide=android.animation.ValueAnimator.ofFloat(knobProgress,current?1:0);
+            slide.setDuration(680);
+            slide.setInterpolator(new android.view.animation.OvershootInterpolator(.7f));
+            slide.addUpdateListener(a->{knobProgress=(float)a.getAnimatedValue();invalidate();});
+            slide.start();
+        }
+        void setTab(int next){
+            if(next==tab)return;
+            tab=next;listOffset=0;
+            if(page!=null)page.cancel();
+            page=android.animation.ValueAnimator.ofFloat(0,1);
+            page.setDuration(340);
+            page.setInterpolator(new android.view.animation.DecelerateInterpolator(2));
+            page.addUpdateListener(a->{pageAlpha=(float)a.getAnimatedValue();invalidate();});
+            page.start();
+        }
+        void ink(Canvas c,String string,float x,float y,float size,int color,boolean weight){
+            t.reset();t.setAntiAlias(true);t.setColor(color);t.setTextSize(size);
+            t.setTypeface(Typeface.create(weight?"sans-serif-medium":"sans-serif",Typeface.NORMAL));
+            c.drawText(string,x,y,t);
+        }
+        void center(Canvas c,String s,float x,float y,float size,int color,boolean bold){
+            t.setTypeface(Typeface.create(bold?"sans-serif-medium":"sans-serif",Typeface.NORMAL));t.setTextSize(size);
+            ink(c,s,x-t.measureText(s)/2,y,size,color,bold);
+        }
+        String cut(String s,int width,float size){
+            if(s==null)return "";
+            t.setTextSize(size);t.setTypeface(Typeface.create("sans-serif-medium",0));
+            if(t.measureText(s)<=width)return s;
+            while(s.length()>3&&t.measureText(s+"…")>width)s=s.substring(0,s.length()-1);
+            return s+"…";
+        }
+        void card(Canvas c,float x,float y,float w,float h,float radius,int color){
+            p.setShader(null);p.setStyle(Paint.Style.FILL);p.setColor(color);
+            p.setShadowLayer(14,0,7,0x11000000);c.drawRoundRect(x,y,x+w,y+h,radius,radius,p);p.clearShadowLayer();
+            p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(.8f);p.setColor(0xcaffffff);
+            c.drawRoundRect(x+.5f,y+.5f,x+w-.5f,y+h-.5f,radius,radius,p);p.setStyle(Paint.Style.FILL);
+        }
+        void gradient(Canvas c,float x,float y,float w,float h,float r,int first,int last){
             p.setStyle(Paint.Style.FILL);
+            p.setShader(new LinearGradient(x,y,x+w,y+h,first,last,Shader.TileMode.CLAMP));
+            c.drawRoundRect(x,y,x+w,y+h,r,r,p);p.setShader(null);
         }
-        void gradient(Canvas c,float x,float y,float w,float h,float radius,int a,int b){
-            p.setShader(new LinearGradient(x,y,x+w,y+h,a,b,Shader.TileMode.CLAMP));
-            c.drawRoundRect(x,y,x+w,y+h,radius,radius,p);p.setShader(null);
+        void circle(Canvas c,float x,float y,float radius,int color){
+            p.setStyle(Paint.Style.FILL);p.setShader(null);p.setColor(color);c.drawCircle(x,y,radius,p);
         }
-        void txt(Canvas c,String s,float x,float y,float size,int color,boolean bold){
-            text.reset();text.setAntiAlias(true);text.setColor(color);text.setTextSize(size);
-            text.setTypeface(Typeface.create(bold?"sans-serif-medium":"sans-serif",Typeface.NORMAL));
-            c.drawText(s,x,y,text);
-        }
-        void center(Canvas c,String s,float x,float y,float size,int col,boolean bold){
-            text.setTextSize(size);text.setTypeface(Typeface.create(bold?"sans-serif-medium":"sans-serif",Typeface.NORMAL));
-            txt(c,s,x-text.measureText(s)/2,y,size,col,bold);
-        }
-        void icon(Canvas c,float x,float y,float size){
-            if(icon!=null){
-                c.save();Path path=new Path();path.addRoundRect(x,y,x+size,y+size,size*.22f,size*.22f,Path.Direction.CW);
-                c.clipPath(path);p.setColor(0xffffffff);c.drawBitmap(icon,null,new RectF(x,y,x+size,y+size),p);c.restore();
-            } else {txt(c,"◆",x+size*.1f,y+size*.8f,size*.7f,ORANGE,true);}
-        }
-        void roundedCircle(Canvas c,float x,float y,float r,int color){
-            p.setColor(color);p.setShader(null);c.drawCircle(x,y,r,p);
+        void drawShield(Canvas c,float x,float y,float size){
+            if(shield==null){ink(c,"◆",x+12,y+size*.7f,size*.6f,ORANGE,true);return;}
+            p.setAlpha(255);c.drawBitmap(shield,null,new RectF(x,y,x+size,y+size),p);
         }
         @Override protected void onDraw(Canvas raw){
-            density=Math.min(getResources().getDisplayMetrics().density,getHeight()/720f);
+            density=Math.min(getResources().getDisplayMetrics().density,getHeight()/745f);
             W=getWidth()/density;H=getHeight()/density;
+            animateState();
             raw.save();raw.scale(density,density);
-            Canvas c=raw;
-            fill(c,0xfffbfcfc);
-            int active=isTunnelOn()?GREEN:ORANGE;
-            p.setShader(new RadialGradient(W*(.78f+phase*.17f),H*.30f,W*.87f,
-                new int[]{(isTunnelOn()?0xc02ce39a:0xc0ffad47),0x00ffffff},null,Shader.TileMode.CLAMP));
+            Canvas c=raw;c.drawColor(0xfffcfcfa);
+            boolean on=isTunnelOn();
+            p.setShader(new RadialGradient(W*.84f,H*.32f,W*.84f,
+                new int[]{on?0x954ef3b4:0x82ffb965,0x15fff5dc,0x00ffffff},null,Shader.TileMode.CLAMP));
             c.drawRect(0,0,W,H,p);p.setShader(null);
-            p.setShader(new RadialGradient(-W*.20f,H*.76f,W*.85f,new int[]{0x46dceee8,0x00ffffff},null,Shader.TileMode.CLAMP));
+            p.setShader(new RadialGradient(W*.01f,H*.84f,W*.94f,
+                new int[]{on?0x4984f2ca:0x40ffcbaa,0x00ffffff},null,Shader.TileMode.CLAMP));
             c.drawRect(0,0,W,H,p);p.setShader(null);
-            // Translucent curved glass ribbons, inspired by the approved reference.
-            for(int j=0;j<3;j++){
-                Path ribbon=new Path();float yy=H*(.20f+j*.10f)+phase*18;
-                ribbon.moveTo(W+50,yy-140);ribbon.cubicTo(W*.20f,yy+90,W*1.25f,yy+150,-50,yy+320);
-                p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(1.3f);p.setColor(0xafffffff);c.drawPath(ribbon,p);
-                p.setStrokeWidth(24);p.setColor(0x17ffffff);c.drawPath(ribbon,p);p.setStyle(Paint.Style.FILL);
+            for(int i=0;i<3;i++){
+                Path path=new Path();float offset=i*75+phase*12;
+                path.moveTo(W+30,-95+offset);
+                path.cubicTo(W*.52f,110+offset,W*.88f,250+offset,-80,H*.66f+offset);
+                p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(1.3f);p.setColor(0x87ffffff);
+                c.drawPath(path,p);p.setStrokeWidth(21);p.setColor(0x10ffffff);c.drawPath(path,p);
             }
-            if(tab==0)home(c,active);else if(tab==1)locations(c);else stats(c);
-            navbar(c);
-            raw.restore();
+            p.setStyle(Paint.Style.FILL);
+            header(c);
+            c.save();c.translate(0,(1-pageAlpha)*16);c.saveLayerAlpha(0,94,W,H-74,(int)(255*Math.max(0,Math.min(1,pageAlpha))));
+            if(tab==0)home(c);else if(tab==1)locations(c);else stats(c);
+            c.restore();c.restore();
+            navbar(c);raw.restore();
         }
         void header(Canvas c){
-            roundedCircle(c,42,48,22,0xdfffffff);
-            txt(c,"⠿",32,56,23,0xff525e67,true);
-            center(c,"VPN",W/2,55,17,INK,true);
-            roundedCircle(c,W-42,48,22,0xeaffffff);
-            txt(c,"⚙",W-52,55,22,0xff52616a,false);
+            card(c,19,36,46,46,23,0xcaffffff);
+            center(c,"⠿",42,65,22,0xff596670,true);
+            center(c,"VPN",W/2,66,19,INK,true);
+            card(c,W-65,36,46,46,23,0xe4ffffff);
+            center(c,"⚙",W-42,66,22,0xff606e79,false);
         }
-        float sliderY(){return H*.435f;}
-        float serverY(){return Math.min(Math.max(sliderY()+144,H*.69f),H-294);}
-        void home(Canvas c,int active){
-            header(c);
-            float ty=Math.min(148,H*.185f);
-            txt(c,"Private.",26,ty,33,INK,true);
-            txt(c,"Secure.",26,ty+36,33,INK,true);
-            txt(c,"Everywhere.",26,ty+72,33,0xff87929f,true);
-            float sy=sliderY(),sw=W-48,sh=90,x=24;
-            p.setStyle(Paint.Style.STROKE);p.setColor(active==GREEN?0x2393edc5:0x28ffb978);
-            p.setStrokeWidth(1);c.drawCircle(W/2,sy+45,98,p);c.drawCircle(W/2,sy+45,112,p);
+        float sliderY(){return H*.409f;}
+        float serverY(){return Math.max(sliderY()+164,Math.min(H*.646f,H-216));}
+        void home(Canvas c){
+            float titleY=Math.max(151,H*.198f);
+            ink(c,"Private.",27,titleY,36,INK,true);
+            ink(c,"Secure.",27,titleY+39,36,INK,true);
+            ink(c,"Everywhere.",27,titleY+78,36,0xff87919f,true);
+            float sy=sliderY(),x=24,sw=W-48,sh=92;
+            boolean on=isTunnelOn(),connecting=isConnecting();
+            int main=on?0xff05db8b:0xffff962d,deep=on?0xff008d63:0xffe45212;
+            float cx=W/2,cy=sy+sh/2;
+            p.setStyle(Paint.Style.STROKE);
+            for(int ring=0;ring<3;ring++){
+                p.setColor((on?0x12a9edcf:0x19ffbb8b)+(int)(phase*8)*0x1000000);
+                p.setStrokeWidth(1.5f);
+                c.drawCircle(cx,cy,95+ring*17+((connecting||on)?phase*7:0),p);
+            }
             p.setStyle(Paint.Style.FILL);
-            card(c,x-2,sy-3,sw+4,sh+6,52,0x90ffffff,0x99ffffff);
-            gradient(c,x,sy,sw,sh,48,
-                isTunnelOn()?0xff00c77d: isConnecting()?0xffffac53:0xffffab43,
-                isTunnelOn()?0xff03a773: isConnecting()?0xffff6c24:0xffff6f18);
-            p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(1.5f);p.setColor(0xcaffffff);
-            c.drawRoundRect(x+1,sy+1,x+sw-1,sy+sh-1,48,48,p);p.setStyle(Paint.Style.FILL);
-            float knobX=isTunnelOn()?x+sw-45+dragOffset:x+45+dragOffset;
-            roundedCircle(c,knobX,sy+45,39,0xfffefefe);
-            if(isTunnelOn()){
-                txt(c,"✓",knobX-17,sy+60,48,GREEN,true);
-                txt(c,"Tunnel active",x+28,sy+53,18,0xffffffff,true);
+            p.setShadowLayer(23,0,12,on?0x4400c48a:0x44ffa452);
+            gradient(c,x,sy,sw,sh,48,main,deep);p.clearShadowLayer();
+            // iOS-like inner specular glass glow.
+            p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(2.5f);p.setColor(0xb9ffffff);
+            c.drawRoundRect(x+2,sy+2,x+sw-2,sy+sh-2,46,46,p);
+            p.setStrokeWidth(6);p.setColor(on?0x5005ffbf:0x55fff0af);
+            c.drawRoundRect(x+7,sy+7,x+sw-7,sy+sh-7,43,43,p);p.setStyle(Paint.Style.FILL);
+            p.setShader(new LinearGradient(x,sy,x,sy+sh,new int[]{0x66ffffff,0x05ffffff,0x00ffffff},null,Shader.TileMode.CLAMP));
+            c.drawRoundRect(x+8,sy+7,x+sw-8,sy+sh*.53f,45,45,p);p.setShader(null);
+            float travel=sw-90;
+            float logical=Math.max(0,Math.min(1,knobProgress));
+            float offset=Math.max(-travel,Math.min(travel,dragOffset));
+            float knobX=x+45+logical*travel+offset;
+            if(connecting)knobX+=Math.sin(phase*Math.PI*2)*3;
+            p.setColor(0xfffcfffd);p.setShadowLayer(14,0,6,0x50000000);c.drawCircle(knobX,cy,40,p);p.clearShadowLayer();
+            p.setStyle(Paint.Style.STROKE);p.setColor(0xc9ffffff);p.setStrokeWidth(1);c.drawCircle(knobX,cy,38,p);p.setStyle(Paint.Style.FILL);
+            if(on)ink(c,"✓",knobX-20,cy+16,51,GREEN,true);
+            else drawShield(c,knobX-30,cy-30,60);
+            if(on)ink(c,"Connected",x+24,cy+6,21,0xffffffff,true);
+            else ink(c,connecting?"Connecting…":"Slide to connect",x+107,cy+6,18,0xffffffff,true);
+            if(connecting){
+                p.setStrokeWidth(3);p.setStyle(Paint.Style.STROKE);p.setColor(0xdfffffff);
+                c.drawArc(x-4,sy-4,x+sw+4,sy+sh+4,phase*360,115,false,p);
+                p.setStyle(Paint.Style.FILL);
+            }
+            center(c,on?"Tunnel active · verifying live route":
+                connecting?"Establishing your secure connection":"Slide or tap the glowing button",
+                W/2,sy+sh+32,11.5f,on?0xff288e6e:MUTED,false);
+            // Clear separation between Smart refresh and manual selection.
+            float quickY=sy+sh+51;
+            card(c,24,quickY,(W-56)/2,36,18,0xdbffffff);
+            card(c,W/2+4,quickY,(W-56)/2,36,18,0xdbffffff);
+            center(c,"↻ Smart update",24+(W-56)/4f,quickY+23,12.5f,ORANGE,true);
+            center(c,"☷ Choose server",W*.75f+1,quickY+23,12.5f,INK,true);
+            float y=serverY();
+            card(c,21,y,W-42,87,25,0xeefeffff);
+            circle(c,61,y+44,26,0xfff2f8fa);
+            if(!paidMode&&preferNative)ink(c,"◈",46,y+55,33,0xff8b67f1,true);
+            else ink(c,"◉",46,y+54,29,0xfff59440,true);
+            String title;
+            String subtitle;
+            if(paidMode){title="Private OpenVPN account";subtitle="Purchased .ovpn profile";}
+            else if(preferNative){
+                title=smartNative?"Smart · automatic selection":"Manual · "+hubPanel.type(chosenNative());
+                subtitle=smartNative?"Up to 12 native servers · auto test":hubPanel.host(chosenNative());
             }else{
-                icon(c,knobX-27,sy+18,54);
-                txt(c,isConnecting()?"Starting tunnel…":"Slide to connect",
-                    x+106,sy+53,16,0xffffffff,true);
+                FreeDirectory.Node node=servers.isEmpty()?null:servers.get(Math.min(selectedIndex,servers.size()-1));
+                title=node==null?"OpenVPN · no nodes yet":node.country;
+                subtitle=node==null?"Use Smart update to refresh":node.host+" · "+(node.ping>0?node.ping+"ms reported":"No ping reported");
             }
-            if(isConnecting()){p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(2);p.setColor(0xffffffff);c.drawArc(x-5,sy-5,x+sw+5,sy+sh+5,phase*360,85,false,p);p.setStyle(Paint.Style.FILL);}
-            String secondary=isTunnelOn()?"Tunnel established · server unverified":
-                isConnecting()?"Starting VPN engine…":"Slide the button to connect";
-            center(c,secondary,W/2,sy+sh+37,12,isTunnelOn()?0xff17895e:MUTED,false);
-            float cy=serverY();
-            card(c,18,cy,W-36,88,25,0xeaffffff,0xffffffff);
-            roundedCircle(c,62,cy+44,23,0xffeef7f4);
-            txt(c,paidMode?"★":"🌐",47,cy+54,27,ORANGE,true);
-            String name=paidMode?"Private OpenVPN account":
-                preferNative&&hasNativeCandidates()?"Embedded VPN · V2Ray":
-                (servers.isEmpty()?"No free OpenVPN relay":servers.get(Math.min(selectedIndex,servers.size()-1)).country);
-            String subtitle=paidMode?"Imported .ovpn profile":
-                preferNative&&hasNativeCandidates()?(hub.entries("V2RAY").size()+" config candidates · not validated"):
-                (servers.isEmpty()?"Tap Smart update to refresh":servers.get(Math.min(selectedIndex,servers.size()-1)).host);
-            txt(c,name,98,cy+38,15,INK,true);
-            txt(c,subtitle.length()>32?subtitle.substring(0,31)+"…":subtitle,98,cy+61,11,MUTED,false);
-            txt(c,"›",W-49,cy+56,30,MUTED,false);
-            card(c,18,cy+98,W-36,62,20,0xeaffffff,0xffffffff);
-            txt(c,updatingAll?"↻ Updating all sources…":"↻ Smart update · select best",35,cy+126,16,ORANGE,true);
-            txt(c,"OpenVPN + V2Ray + Telegram + NapsternetV",35,cy+146,11,MUTED,false);
-            card(c,18,cy+168,W-36,42,18,0xcfffffff,0xffffffff);
-            center(c,"V2Ray  ·  Telegram Proxy  ·  NapsternetV  ›",W/2,cy+195,12,INK,true);
+            ink(c,cut(title,(int)(W-145),16),101,y+35,16,INK,true);
+            ink(c,cut(subtitle,(int)(W-147),12),101,y+58,12,MUTED,false);
+            ink(c,"›",W-51,y+56,31,0xff99a8b0,false);
+            float statY=y+105;
+            card(c,21,statY,W-42,92,24,0xeefeffff);
+            p.setColor(0xffe6eeee);c.drawRect(W/2-1,statY+17,W/2,statY+75,p);
+            ink(c,"↓",41,statY+57,35,on?GREEN:ORANGE,true);
+            ink(c,"Download",82,statY+35,12,MUTED,false);
+            ink(c,"— Mbps",82,statY+59,17,INK,true);
+            ink(c,"↑",W/2+17,statY+57,34,on?GREEN:ORANGE,true);
+            ink(c,"Upload",W/2+56,statY+35,12,MUTED,false);
+            ink(c,"— Mbps",W/2+56,statY+59,17,INK,true);
         }
+        List<FeedParser.Entry> chosenEntries(){
+            String k=locationMode==1?"V2RAY":locationMode==2?"PROXY":"NAPSTERNETV";
+            ArrayList<FeedParser.Entry> data=new ArrayList<>(hubPanel.entries(k));
+            if(locationMode==1)data.sort(Comparator.comparingLong(e->hubPanel.probe.rank(e.value)));
+            return data;
+        }
+        int rowCount(){return locationMode==0?servers.size():chosenEntries().size();}
         void locations(Canvas c){
-            header(c);txt(c,"Locations",24,140,32,INK,true);
-            txt(c,"Free VPN Gate volunteers · updated automatically",24,167,12,MUTED,false);
-            card(c,18,185,W-36,57,20,0xeaffffff,0xffffffff);
-            txt(c,"↻ Smart update all sources",37,222,17,ORANGE,true);
-            if(servers.isEmpty())txt(c,"No servers cached. Tap Refresh.",24,290,15,MUTED,false);
-            int visible=Math.min(servers.size(),Math.max(0,(int)((H-335)/72)));
-            for(int i=0;i<visible;i++){
-                float y=260+i*76;
-                card(c,18,y,W-36,68,20,0xeeffffff,0xffffffff);
-                FreeDirectory.Node node=servers.get(i);
-                txt(c,node.country,38,y+28,15,INK,true);
-                txt(c,node.host,38,y+49,11,MUTED,false);
-                if(!paidMode&&selectedIndex==i)txt(c,"✓",W-60,y+40,24,GREEN,true);
+            ink(c,"Locations",25,135,30,INK,true);
+            ink(c,"Choose a connection · swipe to see more",25,159,12,MUTED,false);
+            String[] names={"OpenVPN","V2Ray","Telegram","Napster"};
+            float chipY=178,chipW=(W-46)/4;
+            for(int i=0;i<4;i++){
+                float x=21+i*chipW;
+                card(c,x,chipY,chipW-5,37,16,locationMode==i?0xffe1f6ef:0xdfffffff);
+                center(c,names[i],x+(chipW-5)/2,chipY+23,11.5f,locationMode==i?0xff009c70:MUTED,true);
             }
+            card(c,21,222,W-42,44,19,0xeaffffff);
+            ink(c,updatingAll?"◌  Updating sources…":"↻  Smart update all sources",39,249,14,ORANGE,true);
+            final float top=280,bottom=H-96,step=80;
+            c.save();c.clipRect(0,top,W,bottom);
+            int count=rowCount();
+            if(count==0){
+                ink(c,"No saved servers in this category",32,323,16,INK,true);
+                ink(c,"Tap update or import a configuration",32,347,12,MUTED,false);
+            }else{
+                List<FeedParser.Entry> entries=locationMode==0?Collections.emptyList():chosenEntries();
+                for(int i=0;i<count;i++){
+                    float y=top+i*step-listOffset;
+                    if(y+73<top||y>bottom)continue;
+                    card(c,21,y+3,W-42,72,20,0xf2ffffff);
+                    int color;String title,subtitle,latency="";
+                    boolean selected=false;
+                    if(locationMode==0){
+                        FreeDirectory.Node n=servers.get(i);
+                        color=0xffed904b;title=n.country;subtitle=n.host;
+                        latency=n.ping>0?n.ping+" ms*":"— ms";
+                        selected=!paidMode&&!preferNative&&selectedIndex==i;
+                    }else{
+                        FeedParser.Entry e=entries.get(i);
+                        color=hubPanel.tint(e.value);
+                        title=hubPanel.type(e.value)+"  ·  "+hubPanel.host(e.value);
+                        subtitle=e.source.replace("https://t.me/s/","@");
+                        latency=locationMode==1?hubPanel.delay(e.value):locationMode==2?"Telegram":"File post";
+                        selected=locationMode==1&&!smartNative&&preferNative&&chosenNative().equals(e.value);
+                    }
+                    p.setColor(color);c.drawRoundRect(29,y+17,35,y+62,4,4,p);
+                    ink(c,cut(title,(int)(W-154),15),48,y+32,15,INK,true);
+                    ink(c,cut(subtitle,(int)(W-160),11),48,y+54,11,MUTED,false);
+                    int latencyColor=locationMode==1?hubPanel.latencyColor(entries.get(i).value):color;
+                    ink(c,cut(latency,86,11),W-111,y+33,11,latencyColor,true);
+                    if(selected)ink(c,"✓",W-45,y+57,23,GREEN,true);
+                    else ink(c,"›",W-47,y+61,23,MUTED,false);
+                }
+                if(count*step>bottom-top){
+                    float track=bottom-top,visible=track/Math.max(track,count*step)*track;
+                    float left=top+(listOffset/Math.max(1,count*step-track))*(track-visible);
+                    p.setColor(0x55a3b8b0);c.drawRoundRect(W-4,left,W-2,left+visible,2,2,p);
+                }
+            }
+            c.restore();
+            ink(c,locationMode==0?"* VPN Gate directory-reported delay":"Colored delay is TCP reachability, not VPN speed",
+                26,H-88,10,MUTED,false);
         }
         void stats(Canvas c){
-            header(c);txt(c,"Statistics",24,140,32,INK,true);
-            card(c,18,177,W-36,130,26,0xeaffffff,0xffffffff);
-            txt(c,"Tunnel status",40,221,13,MUTED,false);
-            txt(c,isTunnelOn()?"Tunnel active":
-                isConnecting()?"Connecting...":"Disconnected",
-                40,257,22,isTunnelOn()?GREEN:INK,true);
-            card(c,18,323,W-36,150,26,0xeaffffff,0xffffffff);
-            txt(c,"Download",40,368,16,MUTED,false);txt(c,"— Mbps",W-130,368,17,INK,true);
-            txt(c,"Upload",40,423,16,MUTED,false);txt(c,"— Mbps",W-130,423,17,INK,true);
-            txt(c,"Speed values require real tunnel telemetry.",24,506,12,MUTED,false);
+            ink(c,"Statistics",25,137,30,INK,true);
+            ink(c,"Tunnel diagnostics · accurate state",25,165,12,MUTED,false);
+            card(c,21,191,W-42,129,24,0xf2ffffff);
+            ink(c,"Current status",43,231,13,MUTED,false);
+            ink(c,isConnecting()?"Starting secure tunnel":isTunnelOn()?"Tunnel active":"Disconnected",
+                43,265,22,isTunnelOn()?GREEN:INK,true);
+            ink(c,"A tunnel alone does not guarantee a reachable proxy.",43,296,11,MUTED,false);
+            card(c,21,336,W-42,135,24,0xf2ffffff);
+            ink(c,"Downstream",43,372,13,MUTED,false);ink(c,"—",W-75,372,23,INK,true);
+            ink(c,"Upstream",43,424,13,MUTED,false);ink(c,"—",W-75,424,23,INK,true);
+            ink(c,"Traffic rates need native byte counters.",30,500,12,MUTED,false);
+            card(c,21,526,W-42,65,18,0xe9ffffff);
+            ink(c,"Network checks",42,553,14,INK,true);
+            ink(c,"Refresh  ·  Test reachability from Locations",42,575,11,MUTED,false);
         }
         void navbar(Canvas c){
-            float top=H-74;
-            card(c,0,top,W,80,23,0xf7ffffff,0xffeeeeee);
+            float y=H-75;
+            card(c,0,y,W,86,27,0xf5ffffff);
             String[] labels={"Home","Locations","Stats"};
-            String[] icons={"⌂","◎","▥"};
+            String[] symbols={"⌂","◎","▥"};
             for(int i=0;i<3;i++){
-                float cx=W*(i+.5f)/3;
-                center(c,icons[i],cx,top+35,25,tab==i?ORANGE:MUTED,true);
-                center(c,labels[i],cx,top+57,11,tab==i?ORANGE:MUTED,false);
+                float x=W*(i+.5f)/3;
+                int color=tab==i?ORANGE:MUTED;
+                center(c,symbols[i],x,y+34,27,color,true);
+                center(c,labels[i],x,y+60,12,color,tab==i);
+                if(i==tab){p.setColor(ORANGE);c.drawRoundRect(x-12,y+5,x+12,y+8,2,2,p);}
             }
         }
-        @Override public boolean onTouchEvent(android.view.MotionEvent e){
+        @Override public boolean onTouchEvent(MotionEvent e){
             float x=e.getX()/density,y=e.getY()/density,sy=sliderY();
             if(e.getAction()==MotionEvent.ACTION_DOWN){
-                downX=x;downY=y;dragging=tab==0&&y>sy&&y<sy+94;
-                return true;
+                downX=x;downY=y;scrollStart=listOffset;dragging=tab==0&&y>sy&&y<sy+96;
+                scrolling=tab==1&&y>280&&y<H-95;return true;
             }
-            if(e.getAction()==MotionEvent.ACTION_CANCEL){dragging=false;dragOffset=0;invalidate();return true;}
-            if(e.getAction()==MotionEvent.ACTION_MOVE&&dragging){dragOffset=vpn.state==VpnController.State.ON?Math.max(-(W-138),Math.min(0,x-downX)):Math.min(W-138,Math.max(0,x-downX));invalidate();return true;}
+            if(e.getAction()==MotionEvent.ACTION_CANCEL){
+                dragging=false;scrolling=false;dragOffset=0;invalidate();return true;
+            }
+            if(e.getAction()==MotionEvent.ACTION_MOVE){
+                if(dragging){
+                    float range=W-140;
+                    dragOffset=isTunnelOn()?Math.max(-range,Math.min(0,x-downX)):Math.min(range,Math.max(0,x-downX));
+                    invalidate();return true;
+                }
+                if(scrolling){
+                    listOffset=Math.max(0,Math.min(Math.max(0,rowCount()*80-(H-96-280)),scrollStart+downY-y));
+                    invalidate();return true;
+                }
+            }
             if(e.getAction()==MotionEvent.ACTION_UP){
                 if(dragging){
                     dragging=false;dragOffset=0;invalidate();
-                    if(!isTunnelOn()&&!isConnecting() && x-downX>Math.min(70,W*.25f))startVpn();
-                    else if(isTunnelOn()&&downX-x>Math.min(70,W*.25f)){
-                        if(SingVpnService.state==SingVpnService.TUNNEL_ACTIVE)stopNative();
-                        if(vpn.state==VpnController.State.ON)vpn.disconnect();
-                    }
+                    if(isConnecting())return true;
+                    if(isTunnelOn()){
+                        if((downX-x)>Math.min(56,W*.19f)||Math.abs(x-downX)<14){
+                            if(SingVpnService.state==SingVpnService.TUNNEL_ACTIVE)stopNative();
+                            if(vpn.state==VpnController.State.ON)vpn.disconnect();
+                        }
+                    }else if(x-downX>Math.min(58,W*.19f)||Math.abs(x-downX)<14)startVpn();
                     return true;
                 }
-                if(y>H-85){tab=Math.min(2,(int)(x/W*3));invalidate();return true;}
-                if(y<85){if(x>W-85)showSettings();else if(x<85)hubPanel.open();return true;}
-                if(tab==0&&y>serverY()+168&&y<serverY()+210){hubPanel.open();return true;}
-                if(tab==0&&y>serverY()+98&&y<serverY()+160){refreshAll();return true;}
-                if(tab==0&&y>serverY()&&y<serverY()+88){selectServer();return true;}
-                if(tab==1){
-                    if(y>185&&y<247){refreshAll();return true;}
-                    if(y>=260){int i=(int)((y-260)/76);if(i>=0&&i<servers.size()){
-                        selectedIndex=i;paidMode=false;preferNative=false;persist();tab=0;invalidate();return true;}}
+                if(y>H-82){setTab(Math.min(2,(int)(x/W*3)));return true;}
+                if(y<91){if(x<85)hubPanel.open();else if(x>W-85)showSettings();return true;}
+                if(tab==0){
+                    float quickY=sliderY()+92+51;
+                    if(y>quickY&&y<quickY+42){
+                        if(x<W/2)refreshAll();else hubPanel.open();return true;
+                    }
+                    if(y>serverY()&&y<serverY()+91){hubPanel.open();return true;}
+                }else if(tab==1){
+                    if(y>178&&y<215){
+                        int next=Math.max(0,Math.min(3,(int)((x-21)/((W-46)/4))));
+                        if(next!=locationMode){locationMode=next;listOffset=0;invalidate();}
+                        return true;
+                    }
+                    if(y>222&&y<271){refreshAll();return true;}
+                    if(scrolling&&Math.abs(y-downY)>12){scrolling=false;return true;}
+                    if(y>=280&&y<H-95){
+                        int index=(int)((y-280+listOffset)/80);
+                        if(index>=0&&index<rowCount()){
+                            if(locationMode==0){
+                                if(isTunnelOn()||isConnecting())info("Disconnect first to select an OpenVPN relay.");
+                                else{selectedIndex=index;paidMode=false;preferNative=false;persist();setTab(0);invalidate();}
+                            }else{
+                                FeedParser.Entry entry=chosenEntries().get(index);
+                                if(locationMode==1)hubPanel.entry(entry);
+                                else if(locationMode==2)hubPanel.telegramConfirm(entry.value);
+                                else hubPanel.napsterEntry(entry.value);
+                            }
+                        }return true;
+                    }
                 }
+                scrolling=false;
             }
             return true;
         }
