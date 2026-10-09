@@ -102,10 +102,18 @@ final class SingBoxConfig {
                 .put("enabled",true).put("fingerprint",fp));
             if(security.equals("reality")){
                 String key=param(uri,"pbk","publicKey");
-                if(key.isEmpty())throw new IllegalArgumentException("Reality public key missing");
+                if(key.isEmpty()||!key.matches("[a-zA-Z0-9_-]{40,48}"))
+                    throw new IllegalArgumentException("Reality public key invalid");
+                String padded=key.replace('-','+').replace('_','/');
+                int remainder=padded.length()%4;
+                if(remainder>0)padded+="====".substring(remainder);
+                if(Base64.decode(padded,Base64.DEFAULT).length!=32)
+                    throw new IllegalArgumentException("Reality public key length invalid");
                 JSONObject reality=new JSONObject().put("enabled",true).put("public_key",key);
                 String sid=param(uri,"sid","shortId");
-                if(!sid.isEmpty())reality.put("short_id",sid);
+                if(!sid.matches("(?i)[a-f0-9]{0,16}")||sid.length()%2!=0)
+                    throw new IllegalArgumentException("Reality short ID invalid");
+                reality.put("short_id",sid);
                 tls.put("reality",reality);
             }
             String alpn=param(uri,"alpn");
@@ -117,6 +125,8 @@ final class SingBoxConfig {
             outbound.put("tls",tls);
         }
         String net=param(uri,"type");
+        if(!net.isEmpty()&&!Arrays.asList("tcp","ws","grpc","http","h2").contains(net))
+            throw new IllegalArgumentException("Unsupported transport "+net);
         String path=param(uri,"path");
         if(net.equals("ws")){
             JSONObject transport=new JSONObject().put("type","ws").put("path",path.isEmpty()?"/":path);
@@ -150,6 +160,8 @@ final class SingBoxConfig {
             .put("server_port",port).put("uuid",uuid).put("security",v.optString("scy","auto"))
             .put("alter_id",v.optInt("aid",0));
         String network=v.optString("net"),path=v.optString("path"),sni=v.optString("sni");
+        if(!network.isEmpty()&&!Arrays.asList("tcp","ws","grpc").contains(network))
+            throw new IllegalArgumentException("Unsupported VMess transport "+network);
         if(v.optString("tls").equalsIgnoreCase("tls")){
             JSONObject tls=new JSONObject().put("enabled",true);
             if(!sni.isEmpty())tls.put("server_name",sni);
