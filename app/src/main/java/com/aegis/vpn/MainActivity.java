@@ -385,6 +385,7 @@ public final class MainActivity extends Activity {
         final android.animation.ValueAnimator ambient=android.animation.ValueAnimator.ofFloat(0,1);
         private long lastAmbientFrame=0;
         private Shader warmShader,greenShader,footerShader,sliderWarmShader,sliderGreenShader;
+        private Bitmap frostBitmap;private BitmapShader frostShader;
         private float cachedW=-1,cachedH=-1;
         android.animation.ValueAnimator slide,page;
         Bitmap shield;
@@ -406,7 +407,12 @@ public final class MainActivity extends Activity {
             wasOn=isTunnelOn();knobProgress=wasOn?1:0;
         }
         @Override protected void onAttachedToWindow(){super.onAttachedToWindow();syncAmbient();}
-        @Override protected void onDetachedFromWindow(){ambient.cancel();if(slide!=null)slide.cancel();if(page!=null)page.cancel();super.onDetachedFromWindow();}
+        @Override protected void onDetachedFromWindow(){
+            ambient.cancel();
+            if(slide!=null)slide.cancel();if(page!=null)page.cancel();
+            if(frostBitmap!=null){frostBitmap.recycle();frostBitmap=null;frostShader=null;}
+            super.onDetachedFromWindow();
+        }
         @Override protected void onWindowVisibilityChanged(int v){
             super.onWindowVisibilityChanged(v);syncAmbient();
         }
@@ -454,11 +460,64 @@ public final class MainActivity extends Activity {
             while(s.length()>3&&t.measureText(s+"…")>width)s=s.substring(0,s.length()-1);
             return s+"…";
         }
+        /** Frosted iOS-style card. Blurred backdrop is rendered ONCE on size
+         * changes at 1/6 resolution; no software BlurMaskFilter per frame.
+         */
         void card(Canvas c,float x,float y,float w,float h,float radius,int color){
-            p.setShader(null);p.setStyle(Paint.Style.FILL);p.setColor(color);
+            p.setStyle(Paint.Style.FILL);p.setAlpha(255);
+            if(frostShader!=null){
+                p.setShader(frostShader);
+                c.drawRoundRect(x,y,x+w,y+h,radius,radius,p);
+                p.setShader(null);
+            }
+            int wash=android.graphics.Color.argb(173,
+                android.graphics.Color.red(color),
+                android.graphics.Color.green(color),
+                android.graphics.Color.blue(color));
+            p.setColor(wash);
             c.drawRoundRect(x,y,x+w,y+h,radius,radius,p);
-            p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(.8f);p.setColor(0xcaffffff);
-            c.drawRoundRect(x+.5f,y+.5f,x+w-.5f,y+h-.5f,radius,radius,p);p.setStyle(Paint.Style.FILL);
+            p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(1.05f);p.setColor(0xedffffff);
+            c.drawRoundRect(x+.65f,y+.65f,x+w-.65f,y+h-.65f,radius,radius,p);
+            p.setStyle(Paint.Style.FILL);p.setShader(null);p.setAlpha(255);
+        }
+        void prepareFrostedBackdrop(){
+            int bw=Math.max(64,(int)(W/6)),bh=Math.max(110,(int)(H/6));
+            if(frostBitmap!=null)frostBitmap.recycle();
+            frostBitmap=Bitmap.createBitmap(bw,bh,Bitmap.Config.ARGB_8888);
+            Canvas bg=new Canvas(frostBitmap);bg.drawColor(0xfffffaf8);
+            Paint q=new Paint(Paint.ANTI_ALIAS_FLAG);
+            q.setShader(new RadialGradient(bw*.83f,bh*.37f,bw*.79f,
+                new int[]{0xffffbe86,0x98fff2c5,0x00ffffff},null,Shader.TileMode.CLAMP));
+            bg.drawRect(0,0,bw,bh,q);
+            q.setShader(new RadialGradient(bw*.85f,bh*.85f,bw*.83f,
+                new int[]{0xff8eecc9,0xaabaf9eb,0x00ffffff},null,Shader.TileMode.CLAMP));
+            bg.drawRect(0,0,bw,bh,q);
+            q.setShader(new RadialGradient(bw*.05f,bh*.98f,bw*.78f,
+                new int[]{0xfff8c8df,0x55e1d9ff,0x00ffffff},null,Shader.TileMode.CLAMP));
+            bg.drawRect(0,0,bw,bh,q);q.setShader(null);
+            // Two separable blur passes on a TINY cached background, never every frame.
+            int[] pixels=new int[bw*bh],scratch=new int[pixels.length];
+            frostBitmap.getPixels(pixels,0,bw,0,0,bw,bh);
+            int radius=4;
+            for(int y=0;y<bh;y++)for(int x=0;x<bw;x++){
+                int ar=0,rr=0,gg=0,bb=0,count=0;
+                for(int dx=-radius;dx<=radius;dx++){
+                    int argb=pixels[y*bw+Math.max(0,Math.min(bw-1,x+dx))];
+                    ar+=argb>>>24;rr+=(argb>>16)&255;gg+=(argb>>8)&255;bb+=argb&255;count++;
+                }
+                scratch[y*bw+x]=((ar/count)<<24)|((rr/count)<<16)|((gg/count)<<8)|(bb/count);
+            }
+            for(int y=0;y<bh;y++)for(int x=0;x<bw;x++){
+                int ar=0,rr=0,gg=0,bb=0,count=0;
+                for(int dy=-radius;dy<=radius;dy++){
+                    int argb=scratch[Math.max(0,Math.min(bh-1,y+dy))*bw+x];
+                    ar+=argb>>>24;rr+=(argb>>16)&255;gg+=(argb>>8)&255;bb+=argb&255;count++;
+                }
+                pixels[y*bw+x]=((ar/count)<<24)|((rr/count)<<16)|((gg/count)<<8)|(bb/count);
+            }
+            frostBitmap.setPixels(pixels,0,bw,0,0,bw,bh);
+            frostShader=new BitmapShader(frostBitmap,Shader.TileMode.CLAMP,Shader.TileMode.CLAMP);
+            Matrix matrix=new Matrix();matrix.setScale(W/bw,H/bh);frostShader.setLocalMatrix(matrix);
         }
         void gradient(Canvas c,float x,float y,float w,float h,float r,int first,int last){
             p.setStyle(Paint.Style.FILL);
@@ -500,12 +559,13 @@ public final class MainActivity extends Activity {
             boolean on=isTunnelOn();
             if(cachedW!=W||cachedH!=H){
                 cachedW=W;cachedH=H;
+                prepareFrostedBackdrop();
                 warmShader=new RadialGradient(W*.84f,H*.32f,W*.84f,
-                    new int[]{0x82ffb965,0x15fff5dc,0x00ffffff},null,Shader.TileMode.CLAMP);
+                    new int[]{0xb8ffa65c,0x35ffdec6,0x00ffffff},null,Shader.TileMode.CLAMP);
                 greenShader=new RadialGradient(W*.84f,H*.32f,W*.84f,
-                    new int[]{0x954ef3b4,0x15f7fff5,0x00ffffff},null,Shader.TileMode.CLAMP);
+                    new int[]{0xb359ecc5,0x25e8fff5,0x00ffffff},null,Shader.TileMode.CLAMP);
                 footerShader=new RadialGradient(W*.01f,H*.84f,W*.94f,
-                    new int[]{0x40ffcbaa,0x00ffffff},null,Shader.TileMode.CLAMP);
+                    new int[]{0x6af8bbc8,0x00ffffff},null,Shader.TileMode.CLAMP);
                 float sx=24,sy=sliderY(),width=W-48;
                 sliderWarmShader=new LinearGradient(sx,sy,sx+width,sy+92,
                     0xffffb34c,0xffee651f,Shader.TileMode.CLAMP);
