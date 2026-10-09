@@ -368,7 +368,7 @@ public final class MainActivity extends Activity {
         float knobProgress=0,pageAlpha=1;
         final android.animation.ValueAnimator ambient=android.animation.ValueAnimator.ofFloat(0,1);
         private long lastAmbientFrame=0;
-        private Shader warmShader,greenShader,footerShader;
+        private Shader warmShader,greenShader,footerShader,sliderWarmShader,sliderGreenShader;
         private float cachedW=-1,cachedH=-1;
         android.animation.ValueAnimator slide,page;
         Bitmap shield;
@@ -389,11 +389,17 @@ public final class MainActivity extends Activity {
             });
             wasOn=isTunnelOn();knobProgress=wasOn?1:0;
         }
-        @Override protected void onAttachedToWindow(){super.onAttachedToWindow();ambient.start();}
+        @Override protected void onAttachedToWindow(){super.onAttachedToWindow();syncAmbient();}
         @Override protected void onDetachedFromWindow(){ambient.cancel();if(slide!=null)slide.cancel();if(page!=null)page.cancel();super.onDetachedFromWindow();}
         @Override protected void onWindowVisibilityChanged(int v){
-            super.onWindowVisibilityChanged(v);if(v==VISIBLE&&!ambient.isStarted())ambient.start();
-            else if(v==VISIBLE)ambient.resume();else ambient.pause();
+            super.onWindowVisibilityChanged(v);syncAmbient();
+        }
+        void syncAmbient(){
+            boolean active=getWindowVisibility()==VISIBLE&&(isTunnelOn()||isConnecting());
+            if(active){
+                if(!ambient.isStarted())ambient.start();
+                else if(ambient.isPaused())ambient.resume();
+            }else if(ambient.isStarted())ambient.cancel();
         }
         void animateState(){
             boolean current=isTunnelOn();
@@ -401,8 +407,8 @@ public final class MainActivity extends Activity {
             wasOn=current;
             if(slide!=null)slide.cancel();
             slide=android.animation.ValueAnimator.ofFloat(knobProgress,current?1:0);
-            slide.setDuration(680);
-            slide.setInterpolator(new android.view.animation.OvershootInterpolator(.7f));
+            slide.setDuration(470);
+            slide.setInterpolator(new android.view.animation.PathInterpolator(.18f,.78f,.22f,1f));
             slide.addUpdateListener(a->{knobProgress=(float)a.getAnimatedValue();invalidate();});
             slide.start();
         }
@@ -411,8 +417,8 @@ public final class MainActivity extends Activity {
             tab=next;listOffset=0;
             if(page!=null)page.cancel();
             page=android.animation.ValueAnimator.ofFloat(0,1);
-            page.setDuration(340);
-            page.setInterpolator(new android.view.animation.DecelerateInterpolator(2));
+            page.setDuration(280);
+            page.setInterpolator(new android.view.animation.PathInterpolator(.2f,.8f,.2f,1f));
             page.addUpdateListener(a->{pageAlpha=(float)a.getAnimatedValue();invalidate();});
             page.start();
         }
@@ -448,12 +454,29 @@ public final class MainActivity extends Activity {
         }
         void drawShield(Canvas c,float x,float y,float size){
             if(shield==null){ink(c,"◆",x+12,y+size*.7f,size*.6f,ORANGE,true);return;}
-            p.setAlpha(255);c.drawBitmap(shield,null,new RectF(x,y,x+size,y+size),p);
+            // Crop the original square artwork into the white circular knob.
+            // A squared bitmap must never escape the round slider outline.
+            float cx=x+size/2,cy=y+size/2,r=size/2-1;
+            c.save();
+            Path mask=new Path();
+            mask.addCircle(cx,cy,r,Path.Direction.CW);
+            c.clipPath(mask);
+            int side=Math.min(shield.getWidth(),shield.getHeight());
+            int sx=(shield.getWidth()-side)/2,sy=(shield.getHeight()-side)/2;
+            p.setFilterBitmap(true);p.setAlpha(255);
+            c.drawBitmap(shield,new Rect(sx,sy,sx+side,sy+side),
+                new RectF(x,y,x+size,y+size),p);
+            c.restore();
+            p.setShader(null);p.setStyle(Paint.Style.STROKE);
+            p.setColor(0x85ffffff);p.setStrokeWidth(1.5f);
+            c.drawCircle(cx,cy,r,p);
+            p.setStyle(Paint.Style.FILL);
         }
         @Override protected void onDraw(Canvas raw){
             density=Math.min(getResources().getDisplayMetrics().density,getHeight()/745f);
             W=getWidth()/density;H=getHeight()/density;
             animateState();
+            syncAmbient();
             raw.save();raw.scale(density,density);
             Canvas c=raw;c.drawColor(0xfffcfcfa);
             boolean on=isTunnelOn();
@@ -465,6 +488,11 @@ public final class MainActivity extends Activity {
                     new int[]{0x954ef3b4,0x15f7fff5,0x00ffffff},null,Shader.TileMode.CLAMP);
                 footerShader=new RadialGradient(W*.01f,H*.84f,W*.94f,
                     new int[]{0x40ffcbaa,0x00ffffff},null,Shader.TileMode.CLAMP);
+                float sx=24,sy=sliderY(),width=W-48;
+                sliderWarmShader=new LinearGradient(sx,sy,sx+width,sy+92,
+                    0xffffb34c,0xffee651f,Shader.TileMode.CLAMP);
+                sliderGreenShader=new LinearGradient(sx,sy,sx+width,sy+92,
+                    0xff09dfa0,0xff069363,Shader.TileMode.CLAMP);
             }
             p.setShader(on?greenShader:warmShader);c.drawRect(0,0,W,H,p);
             p.setShader(footerShader);c.drawRect(0,0,W,H,p);p.setShader(null);
@@ -500,20 +528,23 @@ public final class MainActivity extends Activity {
             int main=on?0xff05db8b:0xffff962d,deep=on?0xff008d63:0xffe45212;
             float cx=W/2,cy=sy+sh/2;
             p.setStyle(Paint.Style.STROKE);
-            for(int ring=0;ring<3;ring++){
+            for(int ring=0;ring<(connecting||on?3:2);ring++){
                 p.setColor((on?0x12a9edcf:0x19ffbb8b)+(int)(phase*8)*0x1000000);
                 p.setStrokeWidth(1.5f);
                 c.drawCircle(cx,cy,95+ring*17+((connecting||on)?phase*7:0),p);
             }
             p.setStyle(Paint.Style.FILL);
-            gradient(c,x,sy,sw,sh,48,main,deep);
+            p.setShader(on?sliderGreenShader:sliderWarmShader);
+            p.setStyle(Paint.Style.FILL);
+            c.drawRoundRect(x,sy,x+sw,sy+sh,48,48,p);
+            p.setShader(null);
             // iOS-like inner specular glass glow.
             p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(2.5f);p.setColor(0xb9ffffff);
             c.drawRoundRect(x+2,sy+2,x+sw-2,sy+sh-2,46,46,p);
             p.setStrokeWidth(6);p.setColor(on?0x5005ffbf:0x55fff0af);
             c.drawRoundRect(x+7,sy+7,x+sw-7,sy+sh-7,43,43,p);p.setStyle(Paint.Style.FILL);
-            p.setShader(new LinearGradient(x,sy,x,sy+sh,new int[]{0x66ffffff,0x05ffffff,0x00ffffff},null,Shader.TileMode.CLAMP));
-            c.drawRoundRect(x+8,sy+7,x+sw-8,sy+sh*.53f,45,45,p);p.setShader(null);
+            p.setColor(0x2dffffff);
+            c.drawRoundRect(x+10,sy+7,x+sw-10,sy+sh*.47f,45,45,p);
             float travel=sw-90;
             float logical=Math.max(0,Math.min(1,knobProgress));
             float offset=Math.max(-travel,Math.min(travel,dragOffset));
