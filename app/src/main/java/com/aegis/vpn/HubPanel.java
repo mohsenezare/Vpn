@@ -113,6 +113,7 @@ final class HubPanel {
   try{
    Uri u=Uri.parse(link);
    String h=u.getHost();
+   if(link.startsWith("tg:")||link.contains("/proxy?"))return u.getQueryParameter("server");
    if(h!=null&&!h.isEmpty())return h;
    if(link.startsWith("vmess://"))return "VMess encrypted share";
    if(link.startsWith("ss://"))return "Shadowsocks server";
@@ -221,7 +222,8 @@ final class HubPanel {
  void napsterMenu(){
   sheet("NapsternetV configs","Import into Aegis when text links are compatible",(body,d)->{
    row(body,"Paste config or subscription","VLESS, VMess, Trojan, SS, HY2 share links",0xffe75a98,()->{d.dismiss();paste("V2RAY");});
-   row(body,"Import local file","Supports plain-text links, Base64 lists, sing-box JSON",0xff9f6bed,()->{d.dismiss();activity.pickConfigFile();});
+   row(body,"Import from clipboard","Use copied readable share links without Telegram",0xff39b7b1,()->{d.dismiss();clipboard();});
+   row(body,"Import local file","Supports plain-text share links and Base64 lists",0xff9f6bed,()->{d.dismiss();activity.pickConfigFile();});
    row(body,"Public NapsternetV posts","Read source references without leaving Aegis",0xffe5a34b,()->{d.dismiss();list("NAPSTERNETV");});
    row(body,"Encrypted .npv/.npv4","Cannot decrypt proprietary files without format support",MUTED,()->activity.info("Encrypted NapsternetV profiles are not interchangeable with sing-box configurations. Import plain-text share links or a supported sing-box JSON instead. No fake conversion is performed."));
   });
@@ -239,8 +241,9 @@ final class HubPanel {
  void importMenu(){
   sheet("Import to Aegis","Locally encrypted · no credentials sent to Aegis servers",(body,d)->{
    row(body,"Paste a config link","Native VLESS, VMess, Trojan, Shadowsocks, HY2",0xff9b6ee8,()->{d.dismiss();paste("V2RAY");});
+   row(body,"Import from clipboard","Read copied share links directly in Aegis",0xff39b7b1,()->{d.dismiss();clipboard();});
    row(body,"Paste MTProto proxy","Add directly to Telegram",0xff29a9e9,()->{d.dismiss();paste("PROXY");});
-   row(body,"Import local file","Read plain-text or compatible sing-box JSON",0xff40b6a1,()->{d.dismiss();activity.pickConfigFile();});
+   row(body,"Import local file","Read plain-text links or Base64 lists",0xff40b6a1,()->{d.dismiss();activity.pickConfigFile();});
    row(body,"Add HTTPS subscription URL","Download supported public configurations",0xffed9a4f,()->{d.dismiss();subscription();});
   });
  }
@@ -261,6 +264,23 @@ final class HubPanel {
     if(count>0){Toast.makeText(activity,count+" saved securely",Toast.LENGTH_LONG).show();list(kind);}
     else activity.info("No supported share link found. Encrypted proprietary files are not decoded.");
    }).setNegativeButton("Cancel",null).show();
+ }
+ void clipboard(){
+  try{
+   android.content.ClipboardManager clipboard=(android.content.ClipboardManager)activity.getSystemService(Context.CLIPBOARD_SERVICE);
+   if(clipboard==null||!clipboard.hasPrimaryClip())throw new Exception("Clipboard is empty");
+   ClipData clip=clipboard.getPrimaryClip();
+   if(clip==null||clip.getItemCount()<1)throw new Exception("Clipboard is empty");
+   CharSequence contents=clip.getItemAt(0).coerceToText(activity);
+   if(contents==null||contents.length()>200000)throw new Exception("Clipboard content exceeds limit");
+   List<FeedParser.Entry> items=FeedParser.parse(contents.toString(),"Clipboard");
+   int n=0;
+   for(FeedParser.Entry e:items)if(e.kind.equals("V2RAY")&&SingBoxConfig.supported(e.value)){
+    vault.put("V2RAY",e.value);n++;
+   }
+   if(n==0)activity.info("Clipboard has no supported VPN share links.");
+   else{Toast.makeText(activity,n+" configs securely saved",Toast.LENGTH_LONG).show();list("V2RAY");}
+  }catch(Exception e){activity.info("Clipboard import failed: "+e.getMessage());}
  }
  void subscription(){
   EditText input=new EditText(activity);input.setHint("https://example.com/subscription");input.setSingleLine(true);pad(input,12,8,12,8);
