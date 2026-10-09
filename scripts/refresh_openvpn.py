@@ -37,7 +37,7 @@ def directory_nodes(raw):
             nodes.append({"host":host,"country":row[5].strip()[:45],"ping":ping,"ovpn":config})
             seen.add(host)
         except (ValueError,UnicodeError,IndexError):continue
-        if len(nodes)>=45:break
+        if len(nodes)>=80:break
     if not nodes:raise ValueError("no valid OpenVPN relays in origin CSV")
     return sorted(nodes,key=lambda n:n["ping"] if n["ping"]>0 else 999999)
 
