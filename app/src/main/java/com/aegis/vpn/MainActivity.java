@@ -26,6 +26,7 @@ public final class MainActivity extends Activity {
     private HubPanel hubPanel;
     private int tab=0, selectedIndex=0;
     private boolean paidMode=false;
+    private boolean updatingAll=false;
     private String error="";
     private ArrayList<FreeDirectory.Node> servers=new ArrayList<>();
     private Handler handler=new Handler(Looper.getMainLooper());
@@ -80,6 +81,40 @@ public final class MainActivity extends Activity {
             if(notify) Toast.makeText(this, list.size()+" free servers available",Toast.LENGTH_SHORT).show();
         }, err -> {if(notify)info("Directory refresh failed. Last saved servers retained.\n"+err);});
     }
+    /** Update OpenVPN and all public config sources, then pick the lowest directory-reported
+     * ping for free mode. This is not proof of a successful VPN handshake. */
+    void refreshAll(){
+        if(updatingAll){info("A source update is already running.");return;}
+        updatingAll=true;screen.invalidate();
+        final int[] outstanding={2};
+        final String[] openVpnResult={"OpenVPN: update pending"};
+        final String[] sourceResult={"Sources: update pending"};
+        Runnable finished=()->{
+            outstanding[0]--;
+            if(outstanding[0]!=0)return;
+            updatingAll=false;screen.invalidate();
+            info("Update complete.\\n"+openVpnResult[0]+"\\n"+sourceResult[0]+
+                "\\nSelection uses directory-reported ping, not a verified VPN connection.");
+        };
+        directory.update(list->{
+            servers=list;
+            if(!paidMode)selectedIndex=0;
+            else if(selectedIndex>=servers.size())selectedIndex=0;
+            persist();screen.invalidate();
+            openVpnResult[0]="OpenVPN: "+list.size()+" free servers updated"+
+                (paidMode?" (paid profile preserved)":"; best advertised ping selected");
+            finished.run();
+        }, err->{
+            openVpnResult[0]="OpenVPN: update failed; "+servers.size()+" cached. "+err;
+            finished.run();
+        });
+        hub.refresh(()->{
+            sourceResult[0]="V2Ray: "+hub.entries("V2RAY").size()+
+                " | Proxies: "+hub.entries("PROXY").size()+
+                " | NapsternetV: "+hub.entries("NAPSTERNETV").size();
+            finished.run();
+        });
+    }
     void showPaidCredentials(String ovpn){
         LinearLayout form=new LinearLayout(this);form.setOrientation(LinearLayout.VERTICAL);form.setPadding(40,10,40,0);
         TextView hint=new TextView(this);
@@ -125,26 +160,29 @@ public final class MainActivity extends Activity {
         screen.invalidate();
     }
     void showSettings(){
-        final String[] actions={"Refresh free OpenVPN servers","Choose free OpenVPN server",
-             "Import paid .ovpn account","Use purchased OpenVPN account",
-             "Use free VPN Gate servers","Delete saved paid account","About / security","V2Ray · Proxies · NapsternetV"};
+        final String[] actions={"Smart update all · choose best free server",
+            "Refresh free OpenVPN servers","Choose free OpenVPN server",
+            "Import paid .ovpn account","Use purchased OpenVPN account",
+            "Use free VPN Gate servers","Delete saved paid account",
+            "About / security","V2Ray · Proxies · NapsternetV"};
         new GlassDialog.Builder(this).setTitle("VPN Settings").setItems(actions,(dlg,which)->{
-            if(which==7)hubPanel.open();
-            if(which==0)refresh(true);
-            if(which==1)selectServer();
-            if(which==2){
+            if(which==8)hubPanel.open();
+            if(which==0)refreshAll();
+            if(which==1)refresh(true);
+            if(which==2)selectServer();
+            if(which==3){
                 Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT);
                 pick.setType("*/*");pick.addCategory(Intent.CATEGORY_OPENABLE);
                 startActivityForResult(pick,PICK_OVPN);
             }
-            if(which==3){if(!profiles.exists())info("Import a .ovpn file first.");
+            if(which==4){if(!profiles.exists())info("Import a .ovpn file first.");
                 else{paidMode=true;persist();screen.invalidate();}}
-            if(which==4){paidMode=false;persist();screen.invalidate();}
-            if(which==5)new GlassDialog.Builder(this).setMessage("Delete encrypted paid OpenVPN profile?")
+            if(which==5){paidMode=false;persist();screen.invalidate();}
+            if(which==6)new GlassDialog.Builder(this).setMessage("Delete encrypted paid OpenVPN profile?")
                 .setNegativeButton("Cancel",null).setPositiveButton("Delete",(d,w)->{profiles.clear();paidMode=false;persist();screen.invalidate();}).show();
-            if(which==6)info("Connection requires the separate free 'OpenVPN for Android' app (de.blinkt.openvpn).\n"+
-              "Free VPN Gate volunteer relays can monitor traffic metadata and disconnect unexpectedly.\n"+
-              "Updates refer to the server directory, not APK updates.\n"+
+            if(which==7)info("Connection requires the separate free 'OpenVPN for Android' app (de.blinkt.openvpn).\\n"+
+              "Free VPN Gate volunteer relays can monitor traffic metadata and disconnect unexpectedly.\\n"+
+              "Updates refer to the server directory, not APK updates.\\n"+
               "VLESS, Hysteria 2 and AmneziaWG engines are not bundled yet.");
         }).show();
     }
@@ -223,7 +261,7 @@ public final class MainActivity extends Activity {
             txt(c,"⚙",W-52,55,22,0xff52616a,false);
         }
         float sliderY(){return H*.435f;}
-        float serverY(){return Math.min(Math.max(sliderY()+144,H*.69f),H-270);}
+        float serverY(){return Math.min(Math.max(sliderY()+144,H*.69f),H-294);}
         void home(Canvas c,int active){
             header(c);
             float ty=Math.min(148,H*.185f);
@@ -265,20 +303,17 @@ public final class MainActivity extends Activity {
             txt(c,name,98,cy+38,15,INK,true);
             txt(c,subtitle.length()>32?subtitle.substring(0,31)+"…":subtitle,98,cy+61,11,MUTED,false);
             txt(c,"›",W-49,cy+56,30,MUTED,false);
-            card(c,18,cy+100,W-36,84,24,0xeaffffff,0xffffffff);
-            txt(c,"↓",34,cy+154,29,active,true);txt(c,"Download",73,cy+133,11,MUTED,false);
-            txt(c,"— Mbps",73,cy+157,17,INK,true);
-            p.setColor(0xffe2e9e8);c.drawRect(W/2,cy+118,W/2+1,cy+171,p);
-            txt(c,"↑",W/2+14,cy+154,29,active,true);txt(c,"Upload",W/2+53,cy+133,11,MUTED,false);
-            txt(c,"— Mbps",W/2+53,cy+157,17,INK,true);
-            card(c,18,cy+193,W-36,42,18,0xcfffffff,0xffffffff);
-            center(c,"V2Ray  ·  Telegram Proxy  ·  NapsternetV  ›",W/2,cy+220,12,INK,true);
+            card(c,18,cy+98,W-36,62,20,0xeaffffff,0xffffffff);
+            txt(c,updatingAll?"↻ Updating all sources…":"↻ Smart update · select best",35,cy+126,16,ORANGE,true);
+            txt(c,"OpenVPN + V2Ray + Telegram + NapsternetV",35,cy+146,11,MUTED,false);
+            card(c,18,cy+168,W-36,42,18,0xcfffffff,0xffffffff);
+            center(c,"V2Ray  ·  Telegram Proxy  ·  NapsternetV  ›",W/2,cy+195,12,INK,true);
         }
         void locations(Canvas c){
             header(c);txt(c,"Locations",24,140,32,INK,true);
             txt(c,"Free VPN Gate volunteers · updated automatically",24,167,12,MUTED,false);
             card(c,18,185,W-36,57,20,0xeaffffff,0xffffffff);
-            txt(c,"↻ Refresh free servers",37,222,17,ORANGE,true);
+            txt(c,"↻ Smart update all sources",37,222,17,ORANGE,true);
             if(servers.isEmpty())txt(c,"No servers cached. Tap Refresh.",24,290,15,MUTED,false);
             int visible=Math.min(servers.size(),Math.max(0,(int)((H-335)/72)));
             for(int i=0;i<visible;i++){
@@ -330,10 +365,11 @@ public final class MainActivity extends Activity {
                 }
                 if(y>H-85){tab=Math.min(2,(int)(x/W*3));invalidate();return true;}
                 if(y<85){if(x>W-85)showSettings();else if(x<85)hubPanel.open();return true;}
-                if(tab==0&&y>serverY()+193&&y<serverY()+235){hubPanel.open();return true;}
+                if(tab==0&&y>serverY()+168&&y<serverY()+210){hubPanel.open();return true;}
+                if(tab==0&&y>serverY()+98&&y<serverY()+160){refreshAll();return true;}
                 if(tab==0&&y>serverY()&&y<serverY()+88){selectServer();return true;}
                 if(tab==1){
-                    if(y>185&&y<247){refresh(true);return true;}
+                    if(y>185&&y<247){refreshAll();return true;}
                     if(y>=260){int i=(int)((y-260)/76);if(i>=0&&i<servers.size()){
                         selectedIndex=i;paidMode=false;persist();tab=0;invalidate();return true;}}
                 }
