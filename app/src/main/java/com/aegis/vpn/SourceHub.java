@@ -28,6 +28,10 @@ final class SourceHub {
   s.add("https://raw.githubusercontent.com/morpheusadam/v2ray-config/main/subs/bundles/lite.txt");
   s.add("https://raw.githubusercontent.com/morpheusadam/v2ray-config/main/subs/bundles/hysteria2.txt");
   for(String code:COUNTRIES)s.add("https://raw.githubusercontent.com/Mokafela/Config-Finder/master/split/sub-"+code+".txt");
+  // Public MTProto lists with independently published handshake checks.
+  // Their upstream claims are NOT a replacement for testing in the user's Telegram app.
+  s.add("https://raw.githubusercontent.com/tgmtproxy/telegram-mtproto-proxy-list/main/proxies.txt");
+  s.add("https://raw.githubusercontent.com/shablin/mtproto-proxy/main/data/valid_proxy.txt");
   s.add("https://raw.githubusercontent.com/SoliSpirit/mtproto/master/all_proxies.txt");
   return s;
  }
@@ -47,14 +51,31 @@ final class SourceHub {
  boolean stale(){return System.currentTimeMillis()-context.getSharedPreferences("hub",0).getLong("attempt",0)>3600000L;}
  void refreshCategory(String kind,Runnable done){
   final String source=kind.equals("PROXY")
-    ?"https://raw.githubusercontent.com/SoliSpirit/mtproto/master/all_proxies.txt"
+    ?"https://raw.githubusercontent.com/tgmtproxy/telegram-mtproto-proxy-list/main/proxies.txt"
     :"https://t.me/s/mitivpn";
   new Thread(()->{
    try{
     List<FeedParser.Entry> values;
     long stamp=System.currentTimeMillis();
     try{
-     values=FeedParser.parse(get(source),source);
+     String text;
+     if(kind.equals("PROXY")){
+      Exception last=null;text=null;
+      String[] verified={
+        source,
+        "https://raw.githubusercontent.com/shablin/mtproto-proxy/main/data/valid_proxy.txt",
+        "https://raw.githubusercontent.com/SoliSpirit/mtproto/master/all_proxies.txt"
+      };
+      for(String candidate:verified){
+       try{
+        String response=get(candidate);
+        if(!FeedParser.parse(response,candidate).isEmpty()){text=response;break;}
+       }catch(Exception e){last=e;}
+      }
+      if(text==null)throw new IOException("No MTProto list reachable"+(last==null?"":": "+last.getMessage()));
+     }else{text=get(source);}
+     values=FeedParser.parse(text,source);
+     values.removeIf(e->!e.kind.equals(kind));
      if(kind.equals("NAPSTERNETV")){
       values.removeIf(e->!e.kind.equals(kind));
       values.sort((a,b)->Long.compare(FeedParser.postId(b.value),FeedParser.postId(a.value)));
