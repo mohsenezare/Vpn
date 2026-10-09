@@ -622,7 +622,7 @@ public final class MainActivity extends Activity {
         void locations(Canvas c){
             ink(c,"Locations",25,135,30,INK,true);
             ink(c,"Choose a connection · swipe to see more",25,159,12,MUTED,false);
-            String[] names={"OpenVPN","V2Ray","Telegram","Napster"};
+            String[] names={"OpenVPN","V2Ray","Telegram","NPV posts"};
             float chipY=178,chipW=(W-46)/4;
             for(int i=0;i<4;i++){
                 float x=21+i*chipW;
@@ -661,7 +661,7 @@ public final class MainActivity extends Activity {
                         color=hubPanel.tint(e.value);
                         title=hubPanel.type(e.value)+"  ·  "+hubPanel.host(e.value);
                         subtitle=e.source.replace("https://t.me/s/","@");
-                        latency=locationMode==1?hubPanel.delay(e.value):locationMode==2?"Telegram":"File post";
+                        latency=locationMode==1?hubPanel.delay(e.value):locationMode==2?"MTProto":"Not VPN";
                         selected=locationMode==1&&!smartNative&&preferNative&&chosenNative().equals(e.value);
                     }
                     p.setColor(color);c.drawRoundRect(29,y+17,35,y+62,4,4,p);
@@ -679,7 +679,7 @@ public final class MainActivity extends Activity {
                 }
             }
             c.restore();
-            ink(c,locationMode==0?"* VPN Gate directory-reported delay":locationMode==1?"Country is source-labeled; delay is TCP only":"Colored delay is TCP reachability, not VPN speed",
+            ink(c,locationMode==0?"* VPN Gate directory-reported delay":locationMode==1?"Country is source-labeled; delay is TCP only":locationMode==2?"MTProto proxies require Telegram confirmation":"NPV post links are not connectable tunnel configs",
                 26,H-88,10,MUTED,false);
         }
         void stats(Canvas c){
