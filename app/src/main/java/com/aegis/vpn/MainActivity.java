@@ -93,8 +93,8 @@ public final class MainActivity extends Activity {
             outstanding[0]--;
             if(outstanding[0]!=0)return;
             updatingAll=false;screen.invalidate();
-            info("Update complete.\\n"+openVpnResult[0]+"\\n"+sourceResult[0]+
-                "\\nSelection uses directory-reported ping, not a verified VPN connection.");
+            info("Update complete.\n"+openVpnResult[0]+"\n"+sourceResult[0]+
+                "\nSelection uses directory-reported ping, not a verified VPN connection.");
         };
         directory.update(list->{
             servers=list;
@@ -180,9 +180,9 @@ public final class MainActivity extends Activity {
             if(which==5){paidMode=false;persist();screen.invalidate();}
             if(which==6)new GlassDialog.Builder(this).setMessage("Delete encrypted paid OpenVPN profile?")
                 .setNegativeButton("Cancel",null).setPositiveButton("Delete",(d,w)->{profiles.clear();paidMode=false;persist();screen.invalidate();}).show();
-            if(which==7)info("Connection requires the separate free 'OpenVPN for Android' app (de.blinkt.openvpn).\\n"+
-              "Free VPN Gate volunteer relays can monitor traffic metadata and disconnect unexpectedly.\\n"+
-              "Updates refer to the server directory, not APK updates.\\n"+
+            if(which==7)info("Connection requires the separate free 'OpenVPN for Android' app (de.blinkt.openvpn).\n"+
+              "Free VPN Gate volunteer relays can monitor traffic metadata and disconnect unexpectedly.\n"+
+              "Updates refer to the server directory, not APK updates.\n"+
               "VLESS, Hysteria 2 and AmneziaWG engines are not bundled yet.");
         }).show();
     }
