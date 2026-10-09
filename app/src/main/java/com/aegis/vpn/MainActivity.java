@@ -44,6 +44,28 @@ public final class MainActivity extends Activity {
     private String error="";
     private ArrayList<FreeDirectory.Node> servers=new ArrayList<>();
     private Handler handler=new Handler(Looper.getMainLooper());
+    // Android UID counters include the app's own background fetches, so rate is approximate.
+    private long lastRx=-1,lastTx=-1,lastSample=0;
+    private volatile double downMbps=-1,upMbps=-1;
+    private final Runnable meterTick=new Runnable(){
+        @Override public void run(){
+            if(SingVpnService.state==SingVpnService.TUNNEL_ACTIVE){
+                long rx=android.net.TrafficStats.getUidRxBytes(android.os.Process.myUid());
+                long tx=android.net.TrafficStats.getUidTxBytes(android.os.Process.myUid());
+                long now=android.os.SystemClock.elapsedRealtime();
+                if(rx>=0&&tx>=0&&lastRx>=0&&now>lastSample){
+                    downMbps=Math.max(0,(rx-lastRx)*8.0/(now-lastSample)/1000.0);
+                    upMbps=Math.max(0,(tx-lastTx)*8.0/(now-lastSample)/1000.0);
+                }
+                lastRx=rx;lastTx=tx;lastSample=now;
+            }else{downMbps=-1;upMbps=-1;lastRx=-1;lastTx=-1;lastSample=0;}
+            if(screen!=null&&SingVpnService.state==SingVpnService.TUNNEL_ACTIVE)screen.invalidate();
+            handler.postDelayed(this,1400);
+        }
+    };
+    String rate(double n){return n<0?"—":String.format(java.util.Locale.US,"%.2f",n);}
+    @Override protected void onResume(){super.onResume();handler.removeCallbacks(meterTick);handler.post(meterTick);}
+    @Override protected void onPause(){handler.removeCallbacks(meterTick);super.onPause();}
 
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);
@@ -75,7 +97,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onDestroy(){
         try{unregisterReceiver(nativeEvents);}catch(Exception ignored){}
-        vpn.close();super.onDestroy();
+        handler.removeCallbacks(meterTick);vpn.close();super.onDestroy();
     }
     @Override @Deprecated protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
@@ -518,10 +540,10 @@ public final class MainActivity extends Activity {
             p.setColor(0xffe6eeee);c.drawRect(W/2-1,statY+12,W/2,statY+69,p);
             ink(c,"↓",41,statY+55,35,on?GREEN:ORANGE,true);
             ink(c,"Download",82,statY+31,12,MUTED,false);
-            ink(c,"— Mbps",82,statY+57,17,INK,true);
+            ink(c,rate(downMbps)+" Mbps",82,statY+57,16,INK,true);
             ink(c,"↑",W/2+17,statY+55,34,on?GREEN:ORANGE,true);
             ink(c,"Upload",W/2+56,statY+31,12,MUTED,false);
-            ink(c,"— Mbps",W/2+56,statY+57,17,INK,true);
+            ink(c,rate(upMbps)+" Mbps",W/2+56,statY+57,16,INK,true);
         }
         List<FeedParser.Entry> chosenEntries(){
             long now=android.os.SystemClock.elapsedRealtime();
@@ -599,9 +621,9 @@ public final class MainActivity extends Activity {
                 43,265,22,isTunnelOn()?GREEN:INK,true);
             ink(c,"A tunnel alone does not guarantee a reachable proxy.",43,296,11,MUTED,false);
             card(c,21,336,W-42,135,24,0xf2ffffff);
-            ink(c,"Downstream",43,372,13,MUTED,false);ink(c,"—",W-75,372,23,INK,true);
-            ink(c,"Upstream",43,424,13,MUTED,false);ink(c,"—",W-75,424,23,INK,true);
-            ink(c,"Traffic rates need native byte counters.",30,500,12,MUTED,false);
+            ink(c,"Downstream",43,372,13,MUTED,false);ink(c,rate(downMbps)+" Mbps",W-156,372,18,INK,true);
+            ink(c,"Upstream",43,424,13,MUTED,false);ink(c,rate(upMbps)+" Mbps",W-156,424,18,INK,true);
+            ink(c,"Approximate app UID traffic · not a speed test",30,500,12,MUTED,false);
             card(c,21,526,W-42,65,18,0xe9ffffff);
             ink(c,"Network checks",42,553,14,INK,true);
             ink(c,"Refresh  ·  Test reachability from Locations",42,575,11,MUTED,false);
