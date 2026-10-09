@@ -71,12 +71,12 @@ public final class SingVpnService extends VpnService {
         });
         return START_NOT_STICKY;
     }
-    private Notification notification(String status){
+    private android.app.Notification notification(String status){
         Intent open=new Intent(this,MainActivity.class);
         PendingIntent content=PendingIntent.getActivity(this,0,open,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         Intent stop=new Intent(this,SingVpnService.class).setAction(ACTION_STOP);
         PendingIntent action=PendingIntent.getService(this,1,stop,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
-        return new Notification.Builder(this,CHANNEL)
+        return new android.app.Notification.Builder(this,CHANNEL)
             .setContentTitle("Aegis VPN")
             .setContentText(status)
             .setSmallIcon(android.R.drawable.ic_lock_lock)
