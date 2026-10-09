@@ -92,7 +92,7 @@ final class HubPanel {
    row(body,"V2Ray / Reality / Hysteria","Browse and select an individual tunnel",0xff815ef3,()->{d.dismiss();list("V2RAY");});
    row(body,"OpenVPN locations","Volunteer nodes · manually selectable",0xfff8863c,()->{d.dismiss();activity.openVpnLocations();});
    row(body,"Telegram MTProto","Add a proxy to Telegram, no channel login needed",0xff29a9ec,()->{d.dismiss();telegramMenu();});
-   row(body,"NapsternetV / imported configs","Import readable links or subscriptions in Aegis",0xffe9569c,()->{d.dismiss();napsterMenu();});
+   row(body,"NapsternetV · compatible imports","3 recent source posts are NOT connectable configs",0xffe9569c,()->{d.dismiss();napsterMenu();});
    row(body,"Import configurations","Paste share link, file, or HTTPS subscription",0xff4478d6,()->{d.dismiss();importMenu();});
    row(body,"Refresh all sources","Public sources · keeps your manual choice",0xfff67b32,()->{d.dismiss();activity.refreshAll();});
    row(body,"Source health / diagnostics","Show last valid updates and errors",0xff81929a,()->{d.dismiss();activity.info(hub.report());});
@@ -163,8 +163,8 @@ final class HubPanel {
   List<FeedParser.Entry> a=entries(kind);
   a.sort(Comparator.comparingLong(e->probe.rank(e.value)));
   String details=kind.equals("V2RAY")?"Select a config to pin it. Tap Test to measure TCP latency."
-      :kind.equals("PROXY")?"Tap to add directly to Telegram":"Import readable configs; .npv encrypted files need a compatible decoder.";
-  sheet(kind.equals("V2RAY")?"VPN servers":kind.equals("PROXY")?"Telegram proxies":"NapsternetV library",details,(body,d)->{
+      :kind.equals("PROXY")?"Tap to add directly to Telegram":"These are POST REFERENCES, not VPN servers; encrypted NPV cannot connect here.";
+  sheet(kind.equals("V2RAY")?"VPN servers":kind.equals("PROXY")?"Telegram proxies":"NPV post references",details,(body,d)->{
    if(kind.equals("V2RAY")){
     row(body,"AUTO · Smart selection","Test multiple servers through sing-box",GREEN,()->{d.dismiss();activity.chooseSmartMode();});
    }
@@ -174,7 +174,16 @@ final class HubPanel {
     probe.test(a,()->{if(!activity.isFinishing())list(kind);});
     d.dismiss();
    });
-   if(a.isEmpty())row(body,"No cached entries","Refresh sources or add a configuration",MUTED,()->{d.dismiss();activity.refreshAll();});
+   if(a.isEmpty())row(body,"No cached entries","Refresh this category or import manually",MUTED,()->{
+    d.dismiss();
+    if(kind.equals("PROXY")||kind.equals("NAPSTERNETV")){
+     Toast.makeText(activity,"Refreshing "+kind+"…",Toast.LENGTH_SHORT).show();
+     hub.refreshCategory(kind,()->{
+      if(entries(kind).isEmpty())activity.info("No public "+kind+" entries available. Use manual import or try later.");
+      else list(kind);
+     });
+    }else activity.refreshAll();
+   });
    int pageSize=40;
    int start=Math.min(Math.max(0,page*pageSize),Math.max(0,a.size()-1));
    int limit=Math.min(start+pageSize,a.size());
@@ -255,7 +264,7 @@ final class HubPanel {
    }).setNegativeButton("Cancel",null).show();
  }
  void napsterMenu(){
-  sheet("NapsternetV configs","Import into Aegis when text links are compatible",(body,d)->{
+  sheet("NapsternetV · compatibility","Encrypted NPV attachments cannot run in sing-box. Import standard share links here.",(body,d)->{
    row(body,"↻ Update three recent NPV posts","Read latest three available NPV attachment posts from @mitivpn",0xffd65fa8,()->{
     d.dismiss();Toast.makeText(activity,"Refreshing last 3 NPV posts…",Toast.LENGTH_SHORT).show();
     hub.refreshCategory("NAPSTERNETV",()->list("NAPSTERNETV"));
@@ -263,7 +272,7 @@ final class HubPanel {
    row(body,"Paste config or subscription","VLESS, VMess, Trojan, SS, HY2 share links",0xffe75a98,()->{d.dismiss();paste("V2RAY");});
    row(body,"Import from clipboard","Use copied readable share links without Telegram",0xff39b7b1,()->{d.dismiss();clipboard();});
    row(body,"Import local file","Supports plain-text share links and Base64 lists",0xff9f6bed,()->{d.dismiss();activity.pickConfigFile();});
-   row(body,"Public NapsternetV posts","Read source references without leaving Aegis",0xffe5a34b,()->{d.dismiss();list("NAPSTERNETV");});
+   row(body,"Three latest public NPV posts","Post references only · open to inspect readable links",0xffe5a34b,()->{d.dismiss();list("NAPSTERNETV");});
    row(body,"Encrypted .npv/.npv4","Cannot decrypt proprietary files without format support",MUTED,()->activity.info("Encrypted NapsternetV profiles are not interchangeable with sing-box configurations. Import plain-text share links or a supported sing-box JSON instead. No fake conversion is performed."));
   });
  }
