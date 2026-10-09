@@ -87,14 +87,15 @@ final class SourceHub {
       if(kind.equals("NAPSTERNETV")&&v.matches("https://t\\.me/[A-Za-z0-9_]+/[0-9]+"))entries.add(new FeedParser.Entry(kind,v,s));
       else entries.addAll(FeedParser.parse(v,s));
      }
-     if(s.endsWith("/npv_iran")){
+     if(s.endsWith("/npv_iran")||s.endsWith("/mitivpn")){
       entries.removeIf(e->!e.kind.equals("NAPSTERNETV"));
       entries.sort((a,b)->Long.compare(FeedParser.postId(b.value),FeedParser.postId(a.value)));
       entries=new ArrayList<>(entries.subList(0,Math.min(3,entries.size())));
      }
      if(entries.isEmpty())throw new IOException("No valid configs in public mirror");
     }
-    if(s.endsWith("/npv_iran")){
+    if(s.endsWith("/npv_iran")||s.endsWith("/mitivpn")){
+     entries.removeIf(e->!e.kind.equals("NAPSTERNETV"));
      entries.sort((a,b)->Long.compare(FeedParser.postId(b.value),FeedParser.postId(a.value)));
      entries=new ArrayList<>(entries.subList(0,Math.min(3,entries.size())));
     }
@@ -112,10 +113,18 @@ final class SourceHub {
    // Keep the last successful cache for 72 h, including during feed failures.
    if(System.currentTimeMillis()-context.getSharedPreferences("hub",0).getLong(s+"time",0)>259200000L)continue;
    try{JSONArray a=new JSONArray(context.getSharedPreferences("hub",0).getString(s,"[]"));
-    for(int i=0;i<a.length();i++){JSONObject o=a.getJSONObject(i);if(o.getString("k").equals(kind)&&(!kind.equals("NAPSTERNETV")||s.endsWith("/npv_iran")))
-     result.put(o.getString("v"),new FeedParser.Entry(kind,o.getString("v"),s));}
+    for(int i=0;i<a.length();i++){JSONObject o=a.getJSONObject(i);
+     if(o.getString("k").equals(kind)&&(!kind.equals("NAPSTERNETV")||s.endsWith("/mitivpn")||s.endsWith("/npv_iran")))
+      result.put(o.getString("v"),new FeedParser.Entry(kind,o.getString("v"),s));
+    }}
    }catch(Exception ignored){}
-  }return new ArrayList<>(result.values());
+  }
+  ArrayList<FeedParser.Entry> out=new ArrayList<>(result.values());
+  if(kind.equals("NAPSTERNETV")){
+   out.sort((a,b)->Long.compare(FeedParser.postId(b.value),FeedParser.postId(a.value)));
+   return new ArrayList<>(out.subList(0,Math.min(3,out.size())));
+  }
+  return out;
  }
  String report(){
   StringBuilder b=new StringBuilder();
