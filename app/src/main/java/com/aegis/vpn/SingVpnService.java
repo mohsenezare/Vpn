@@ -74,7 +74,22 @@ public final class SingVpnService extends VpnService {
             options.setTempPath(getCacheDir().getAbsolutePath());
             Libbox.setup(options);
             platform=new SingBoxPlatform(this);
-            core=Libbox.newService(config,platform);
+            // Validate on the worker thread; never let one expired/incompatible
+            // public node prevent the other candidates from launching.
+            String candidate=config;
+            for(int tries=0;tries<12;tries++){
+                try{
+                    core=Libbox.newService(candidate,platform);
+                    break;
+                }catch(Exception invalid){
+                    String next=SingBoxConfig.dropInvalidAutoNode(candidate,invalid.getMessage());
+                    if(next==null||next.equals(candidate))throw invalid;
+                    candidate=next;
+                    Log.w("AegisSingBox","Skipped malformed public outbound while initializing");
+                }
+            }
+            if(core==null)throw new IllegalStateException("All generated nodes were rejected");
+            currentConfig=candidate;
             core.start();
             if(stopping){cleanup();return;}
             if(tun==null)throw new IllegalStateException("VPN TUN was not created");
