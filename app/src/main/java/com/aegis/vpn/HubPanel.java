@@ -158,7 +158,8 @@ final class HubPanel {
   b.setGravity(Gravity.CENTER);pad(b,4,0,4,0);badge.addView(b);
   line.setOnClickListener(v->click.run());
  }
- void list(String kind){
+ void list(String kind){list(kind,0);}
+ void list(String kind,int page){
   List<FeedParser.Entry> a=entries(kind);
   a.sort(Comparator.comparingLong(e->probe.rank(e.value)));
   String details=kind.equals("V2RAY")?"Select a config to pin it. Tap Test to measure TCP latency."
@@ -174,13 +175,16 @@ final class HubPanel {
     d.dismiss();
    });
    if(a.isEmpty())row(body,"No cached entries","Refresh sources or add a configuration",MUTED,()->{d.dismiss();activity.refreshAll();});
-   int limit=Math.min(kind.equals("V2RAY")?120:80,a.size());
+   int pageSize=40;
+   int start=Math.min(Math.max(0,page*pageSize),Math.max(0,a.size()-1));
+   int limit=Math.min(start+pageSize,a.size());
    String selected=vault.selected();
-   for(int i=0;i<limit;i++){
+   for(int i=start;i<limit;i++){
     FeedParser.Entry e=a.get(i);
     coloredConfigRow(body,e,selected.equals(e.value),()->{d.dismiss();entry(e);});
    }
-   if(a.size()>limit)row(body,(a.size()-limit)+" more entries","Showing first "+limit+" to keep scrolling fast",MUTED,null);
+   if(start>0)row(body,"‹ Previous servers","Show earlier "+pageSize+" entries",0xff75899a,()->{d.dismiss();list(kind,Math.max(0,page-1));});
+   if(a.size()>limit)row(body,"Next servers ›",Math.min(pageSize,a.size()-limit)+" more in this page",0xff75899a,()->{d.dismiss();list(kind,page+1);});
   });
  }
  void entry(FeedParser.Entry e){
