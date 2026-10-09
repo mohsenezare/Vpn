@@ -25,7 +25,7 @@ final class SingBoxConfig {
         cfg.put("dns",dns);
         cfg.put("inbounds",new JSONArray().put(tun));
         cfg.put("outbounds",new JSONArray().put(proxy).put(new JSONObject().put("type","direct").put("tag","direct")));
-        cfg.put("route",new JSONObject().put("auto_detect_interface",true).put("final","proxy"));
+        cfg.put("route",new JSONObject().put("final","proxy"));
         return cfg.toString();
     }
     /**
