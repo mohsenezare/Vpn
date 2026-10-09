@@ -40,6 +40,7 @@ final class FreeDirectory {
             catch(Exception e){handler.post(()->failure.failed(e.getMessage()));}
         },"free-directory").start();
     }
+    static int parsePing(String value){try{return Integer.parseInt(value);}catch(Exception e){return 0;}}
     ArrayList<Node> fetch() throws Exception {
         HttpURLConnection conn=(HttpURLConnection)new URL(URL).openConnection();
         conn.setInstanceFollowRedirects(false);
@@ -64,7 +65,7 @@ final class FreeDirectory {
                 try{
                     String ovpn=new String(Base64.decode(col[14].trim(),Base64.DEFAULT),java.nio.charset.StandardCharsets.UTF_8);
                     if(ovpn.length()<80||ovpn.length()>60000||!ovpn.contains("remote ")||!ovpn.contains("client"))continue;
-                    nodes.add(new Node(col[5].trim(),host,ovpn,Integer.parseInt(col[3].trim())));
+                    nodes.add(new Node(col[5].trim(),host,ovpn,parsePing(col[3].trim())));
                 }catch(Exception ignored){}
                 if(nodes.size()>=LIMIT)break;
             }

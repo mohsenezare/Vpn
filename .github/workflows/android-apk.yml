@@ -21,6 +21,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
+      - name: Test feed parsers
+        run: |
+          javac -d /tmp/parser-tests app/src/main/java/com/aegis/vpn/FeedParser.java tests/FeedParserTest.java
+          java -cp /tmp/parser-tests com.aegis.vpn.FeedParserTest
       - name: Compile debug APK
         run: gradle --no-daemon :app:assembleDebug
       - uses: actions/upload-artifact@v4

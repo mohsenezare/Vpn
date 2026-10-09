@@ -38,7 +38,6 @@ public final class VpnController {
     private final ServiceConnection service=new ServiceConnection(){
         @Override public void onServiceConnected(ComponentName name,IBinder binder){
             remote=IOpenVPNAPIService.Stub.asInterface(binder);
-            try{remote.registerStatusCallback(callback);}catch(Exception ignored){}
             beginAuthorized();
         }
         @Override public void onServiceDisconnected(ComponentName name){
@@ -65,6 +64,7 @@ public final class VpnController {
             if(a!=null){activity.startActivityForResult(a,ASK_APP);return;}
             Intent b=remote.prepareVPNService();
             if(b!=null){activity.startActivityForResult(b,ASK_VPN);return;}
+            remote.registerStatusCallback(callback);
             remote.startVPN(pending);
             pending=null;requesting=false;
         }catch(Exception e){fail("OpenVPN service authorization/start failed: "+e.getMessage());}
