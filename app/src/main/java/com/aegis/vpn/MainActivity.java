@@ -218,7 +218,7 @@ public final class MainActivity extends Activity {
             nativeCacheAt=0;screen.listCacheAt=0;
             sourceResult[0]="V2Ray: "+hub.entries("V2RAY").size()+
                 " | Proxies: "+hub.entries("PROXY").size()+
-                " | NapsternetV: "+hub.entries("NAPSTERNETV").size();
+                ";
             List<FeedParser.Entry> measured=hub.entries("V2RAY");
             if(measured.isEmpty()||hubPanel.probe.busy){finished.run();return;}
             hubPanel.probe.test(measured,finished);
@@ -291,7 +291,18 @@ public final class MainActivity extends Activity {
             startForegroundService(intent);
         }catch(Exception ex){info("Embedded VPN service could not start: "+ex.getMessage());}
     }
-    void stopNative(){startService(new Intent(this,SingVpnService.class).setAction(SingVpnService.ACTION_STOP));}
+    void stopNative(){
+        pendingNativeConfig=null;
+        try{startService(new Intent(this,SingVpnService.class).setAction(SingVpnService.ACTION_STOP));}
+        catch(Exception ex){android.util.Log.w("Aegis","VPN stop request failed",ex);}
+    }
+    void disconnectImmediately(){
+        // STOP works during service initialization as well as after connection.
+        pendingNativeConfig=null;
+        if(SingVpnService.state!=SingVpnService.OFF)stopNative();
+        if(vpn.state!=VpnController.State.OFF)vpn.disconnect();
+        if(screen!=null){screen.dragOffset=0;screen.invalidate();}
+    }
     boolean isTunnelOn(){return vpn.state==VpnController.State.ON||SingVpnService.state==SingVpnService.TUNNEL_ACTIVE;}
     boolean isConnecting(){return vpn.state==VpnController.State.CONNECTING||SingVpnService.state==SingVpnService.STARTING;}
     void startVpn(){
@@ -307,22 +318,21 @@ public final class MainActivity extends Activity {
             return;
         }else if(preferNative&&hasNativeCandidates()){
             ArrayList<FeedParser.Entry> choices=new ArrayList<>(hubPanel.entries("V2RAY"));
+            // V5 priority: its working community sources first, tested TCP second.
+            // Do not put arbitrary large country feed lists ahead of the original pool.
             choices.sort((a,b)->{
+                boolean pa=SourceHub.preferred(a.source),pb=SourceHub.preferred(b.source);
+                if(pa!=pb)return pa?-1:1;
                 long ra=hubPanel.probe.rank(a.value),rb=hubPanel.probe.rank(b.value);
                 if(ra!=rb)return Long.compare(ra,rb);
                 return Boolean.compare(!a.value.startsWith("vless://"),!b.value.startsWith("vless://"));
             });
             ArrayList<String> candidates=new ArrayList<>();
-            HashMap<String,Integer> perEndpoint=new HashMap<>();
+            // Restore v0.5 selection: no hostname cap that accidentally excludes
+            // two working credentials on the same Reality/CDN endpoint.
             for(FeedParser.Entry e:choices){
                 if(candidates.size()>=12)break;
-                try{
-                    org.json.JSONObject o=SingBoxConfig.outbound(e.value);
-                    String endpoint=o.getString("server")+":"+o.getInt("server_port");
-                    // Maintain route diversity, but allow two distinct credentials per host.
-                    int already=perEndpoint.containsKey(endpoint)?perEndpoint.get(endpoint):0;
-                    if(already<2){candidates.add(e.value);perEndpoint.put(endpoint,already+1);}
-                }catch(Exception ignored){}
+                if(SingBoxConfig.supported(e.value))candidates.add(e.value);
             }
             try{connectNative(SingBoxConfig.buildAuto(candidates));}
             catch(Exception ex){info("No supported native proxy config: "+ex.getMessage());}
@@ -341,7 +351,7 @@ public final class MainActivity extends Activity {
             "Refresh free OpenVPN servers","Choose free OpenVPN server",
             "Import paid .ovpn account","Use purchased OpenVPN account",
             "Use free VPN Gate servers","Delete saved paid account",
-            "About / security","V2Ray · Proxies · NapsternetV","Use embedded V2Ray VPN"};
+            "About / security","V2Ray · Telegram proxies","Use embedded V2Ray VPN"};
         new GlassDialog.Builder(this).setTitle("VPN Settings").setItems(actions,(dlg,which)->{
             if(which==8)hubPanel.open();
             if(which==9){paidMode=false;preferNative=true;persist();screen.invalidate();}
@@ -612,7 +622,7 @@ public final class MainActivity extends Activity {
         List<FeedParser.Entry> chosenEntries(){
             long now=android.os.SystemClock.elapsedRealtime();
             if(listCacheMode==locationMode&&now-listCacheAt<5000)return listCache;
-            String k=locationMode==1?"V2RAY":locationMode==2?"PROXY":"NAPSTERNETV";
+            String k=locationMode==1?"V2RAY":"PROXY";
             ArrayList<FeedParser.Entry> data=new ArrayList<>(hubPanel.entries(k));
             if(locationMode==1){
                 if(!countryFilter.isEmpty())data.removeIf(e->!countryFilter.equals(SourceHub.country(e.source)));
@@ -625,9 +635,9 @@ public final class MainActivity extends Activity {
         void locations(Canvas c){
             ink(c,"Locations",25,135,30,INK,true);
             ink(c,"Choose a connection · swipe to see more",25,159,12,MUTED,false);
-            String[] names={"OpenVPN","V2Ray","Telegram","NPV posts"};
-            float chipY=178,chipW=(W-46)/4;
-            for(int i=0;i<4;i++){
+            String[] names={"OpenVPN","V2Ray","Telegram"};
+            float chipY=178,chipW=(W-46)/3;
+            for(int i=0;i<3;i++){
                 float x=21+i*chipW;
                 card(c,x,chipY,chipW-5,37,16,locationMode==i?0xffe1f6ef:0xdfffffff);
                 center(c,names[i],x+(chipW-5)/2,chipY+23,11.5f,locationMode==i?0xff009c70:MUTED,true);
@@ -664,7 +674,7 @@ public final class MainActivity extends Activity {
                         color=hubPanel.tint(e.value);
                         title=hubPanel.type(e.value)+"  ·  "+hubPanel.host(e.value);
                         subtitle=e.source.replace("https://t.me/s/","@");
-                        latency=locationMode==1?hubPanel.delay(e.value):locationMode==2?"MTProto":"Not VPN";
+                        latency=locationMode==1?hubPanel.delay(e.value):"Telegram";
                         selected=locationMode==1&&!smartNative&&preferNative&&chosenNative().equals(e.value);
                     }
                     p.setColor(color);c.drawRoundRect(29,y+17,35,y+62,4,4,p);
@@ -682,7 +692,7 @@ public final class MainActivity extends Activity {
                 }
             }
             c.restore();
-            ink(c,locationMode==0?"* VPN Gate directory-reported delay":locationMode==1?"Country is source-labeled; delay is TCP only":locationMode==2?"MTProto proxies require Telegram confirmation":"NPV post links are not connectable tunnel configs",
+            ink(c,locationMode==0?"* VPN Gate directory-reported delay":locationMode==1?"Source country is unverified; delay is TCP":"Telegram confirms MTProto proxy after selection",
                 26,H-88,10,MUTED,false);
         }
         void stats(Canvas c){
@@ -738,13 +748,10 @@ public final class MainActivity extends Activity {
             if(e.getAction()==MotionEvent.ACTION_UP){
                 if(dragging){
                     dragging=false;dragOffset=0;invalidate();
-                    if(isConnecting())return true;
-                    if(isTunnelOn()){
-                        if((downX-x)>Math.min(56,W*.19f)||Math.abs(x-downX)<14){
-                            if(SingVpnService.state==SingVpnService.TUNNEL_ACTIVE)stopNative();
-                            if(vpn.state==VpnController.State.ON)vpn.disconnect();
-                        }
-                    }else if(x-downX>Math.min(58,W*.19f)||Math.abs(x-downX)<14)startVpn();
+                    // Tap the middle connect control to stop IMMEDIATELY in
+                    // both CONNECTING and CONNECTED states (no slide required).
+                    if(isConnecting()||isTunnelOn())disconnectImmediately();
+                    else if(x-downX>Math.min(58,W*.19f)||Math.abs(x-downX)<14)startVpn();
                     return true;
                 }
                 if(y>H-82){setTab(Math.min(2,(int)(x/W*3)));return true;}
@@ -757,7 +764,7 @@ public final class MainActivity extends Activity {
                     if(y>serverY()&&y<serverY()+81){hubPanel.open();return true;}
                 }else if(tab==1){
                     if(y>178&&y<215){
-                        int next=Math.max(0,Math.min(3,(int)((x-21)/((W-46)/4))));
+                        int next=Math.max(0,Math.min(2,(int)((x-21)/((W-46)/3))));
                         if(next!=locationMode){
                             locationMode=next;listOffset=0;listCacheAt=0;invalidate();
                             if(next==2&&hubPanel.entries("PROXY").isEmpty()){
@@ -767,8 +774,6 @@ public final class MainActivity extends Activity {
                                         Toast.makeText(MainActivity.this,"Telegram feeds unavailable; use manual MTProto add",Toast.LENGTH_LONG).show();
                                 });
                             }
-                            if(next==3&&hubPanel.entries("NAPSTERNETV").isEmpty())
-                                hub.refreshCategory("NAPSTERNETV",()->{listCacheAt=0;invalidate();});
                         }
                         return true;
                     }
@@ -784,8 +789,7 @@ public final class MainActivity extends Activity {
                             }else{
                                 FeedParser.Entry entry=chosenEntries().get(index);
                                 if(locationMode==1)hubPanel.entry(entry);
-                                else if(locationMode==2)hubPanel.telegramConfirm(entry.value);
-                                else hubPanel.napsterEntry(entry.value);
+                                else hubPanel.telegramConfirm(entry.value);
                             }
                         }return true;
                     }
