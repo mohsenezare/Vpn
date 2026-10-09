@@ -21,6 +21,8 @@ jobs:
         with:
           python-version: '3.12'
       - run: python scripts/refresh_sources.py
+      - name: Refresh VPN Gate public mirror (best effort)
+        run: python scripts/refresh_openvpn.py
       - name: Preserve latest public feeds
         run: |
           git config user.name 'Aegis source updater'
