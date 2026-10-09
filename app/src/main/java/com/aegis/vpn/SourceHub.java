@@ -161,7 +161,7 @@ final class SourceHub {
     for(int i=0;i<a.length();i++){JSONObject o=a.getJSONObject(i);
      if(o.getString("k").equals(kind)&&(!kind.equals("NAPSTERNETV")||s.endsWith("/mitivpn")||s.endsWith("/npv_iran")))
       result.put(o.getString("v"),new FeedParser.Entry(kind,o.getString("v"),s));
-    }}
+    }
    }catch(Exception ignored){}
   }
   ArrayList<FeedParser.Entry> out=new ArrayList<>(result.values());
