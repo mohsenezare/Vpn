@@ -217,8 +217,7 @@ public final class MainActivity extends Activity {
         hub.refresh(()->{
             nativeCacheAt=0;screen.listCacheAt=0;
             sourceResult[0]="V2Ray: "+hub.entries("V2RAY").size()+
-                " | Proxies: "+hub.entries("PROXY").size()+
-                ";
+                " | Telegram proxies: "+hub.entries("PROXY").size();
             List<FeedParser.Entry> measured=hub.entries("V2RAY");
             if(measured.isEmpty()||hubPanel.probe.busy){finished.run();return;}
             hubPanel.probe.test(measured,finished);
