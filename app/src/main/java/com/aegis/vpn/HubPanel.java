@@ -40,13 +40,17 @@ final class HubPanel {
  void entry(FeedParser.Entry e){
   if(e.kind.equals("PROXY")){launch(e.value);return;}
   if(e.kind.equals("NAPSTERNETV")){launch(e.value);return;}
-  new GlassDialog.Builder(activity).setTitle("Import into V2Ray client")
-   .setMessage("Copy this configuration, then in v2rayNG choose + → Import config from clipboard. Test and connect inside that app. Aegis does not label an imported config as a working tunnel.")
-   .setPositiveButton("Copy & open v2rayNG",(d,w)->{
-    ((android.content.ClipboardManager)activity.getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("VPN configuration",e.value));
+  AlertDialog.Builder dialog=new GlassDialog.Builder(activity).setTitle("V2Ray connection")
+   .setMessage("Use the Aegis built-in sing-box engine. A public configuration may be offline; starting the TUN alone does not prove upstream connectivity.")
+   .setPositiveButton("Connect in Aegis",(d,w)->activity.connectNativeEntry(e.value))
+   .setNeutralButton("Copy for v2rayNG",(d,w)->{
+    ((android.content.ClipboardManager)activity.getSystemService(Context.CLIPBOARD_SERVICE))
+      .setPrimaryClip(ClipData.newPlainText("VPN configuration",e.value));
     Intent intent=activity.getPackageManager().getLaunchIntentForPackage("com.v2ray.ang");
-    if(intent!=null)activity.startActivity(intent);else launch("https://github.com/2dust/v2rayNG/releases");
-   }).setNeutralButton("Source",(d,w)->launch(e.source.replace("/s/","/"))).setNegativeButton("Close",null).show();
+    if(intent!=null)activity.startActivity(intent);
+    else launch("https://github.com/2dust/v2rayNG/releases");
+   }).setNegativeButton("Close",null);
+  dialog.show();
  }
  void channels(){new GlassDialog.Builder(activity).setTitle("Source channels").setItems(SourceHub.CHANNELS,(d,w)->launch("https://t.me/"+SourceHub.CHANNELS[w])).setNegativeButton("Close",null).show();}
  void launch(String url){try{activity.startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url)));}catch(ActivityNotFoundException e){activity.info("Install an app that can open this link.");}}
