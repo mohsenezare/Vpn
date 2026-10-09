@@ -25,6 +25,7 @@ public final class MainActivity extends Activity {
     private String selectedNativeCache="";
     private boolean smartNative=true;
     private FreeDirectory directory;
+    private OpenVpnProbe openProbe;
     private Screen screen;
     private SourceHub hub;
     private HubPanel hubPanel;
@@ -76,6 +77,7 @@ public final class MainActivity extends Activity {
         vault=new SecureLinks(this);
         selectedNativeCache=vault.selected();
         directory=new FreeDirectory(this);
+        openProbe=new OpenVpnProbe();
         servers=directory.load();
         paidMode=getPreferences(MODE_PRIVATE).getBoolean("paid_mode",false);
         preferNative=getPreferences(MODE_PRIVATE).getBoolean("prefer_native",true);
@@ -148,13 +150,46 @@ public final class MainActivity extends Activity {
         Toast.makeText(this,"Smart Mode selected · swipe to connect",Toast.LENGTH_SHORT).show();
     }
     void selectManualNative(String link,boolean connectNow){
-        if(isTunnelOn()||isConnecting()){info("Disconnect the current tunnel before changing server.");return;}
         try{
             if(!SingBoxConfig.supported(link))throw new IllegalArgumentException("Unsupported native configuration");
-            vault.select(link);selectedNativeCache=link;smartNative=false;preferNative=true;paidMode=false;persist();screen.invalidate();
-            if(connectNow)connectNativeEntry(link);
-            else Toast.makeText(this,"Server selected · swipe to connect",Toast.LENGTH_SHORT).show();
-        }catch(Exception e){info(e.getMessage());}
+            String config=SingBoxConfig.build(link);
+            vault.select(link);selectedNativeCache=link;smartNative=false;preferNative=true;paidMode=false;
+            persist();screen.invalidate();
+            if(connectNow){
+                // Android supports one active VPN: close the old OpenVPN tunnel first.
+                if(vpn.state!=VpnController.State.OFF){
+                    vpn.disconnect();
+                    handler.postDelayed(()->startManual(config),450);
+                }else startManual(config);
+            }else Toast.makeText(this,"Server selected · swipe to connect",Toast.LENGTH_SHORT).show();
+        }catch(Exception e){info("Server config invalid: "+e.getMessage());}
+    }
+    private void startManual(String config){
+        if(SingVpnService.state==SingVpnService.STARTING||SingVpnService.state==SingVpnService.TUNNEL_ACTIVE){
+            // START with a different config reuses the native foreground service,
+            // swapping after the old core is closed by the worker.
+            startNativeService(config);
+        }else connectNative(config);
+    }
+    void selectOpenVpnServer(int index){
+        if(index<0||index>=servers.size())return;
+        selectedIndex=index;paidMode=false;preferNative=false;persist();
+        String ovpn=servers.get(index).config;
+        if(SingVpnService.state==SingVpnService.TUNNEL_ACTIVE||SingVpnService.state==SingVpnService.STARTING){
+            stopNative();
+            handler.postDelayed(()->vpn.replace(ovpn),650);
+        }else vpn.replace(ovpn);
+        tab=0;screen.invalidate();
+    }
+    void quickBackup(){
+        // Cloudflare's official Android app owns and manages its own tunnel.
+        final String warp="com.cloudflare.onedotonedotonedotone";
+        try{
+            Intent launch=getPackageManager().getLaunchIntentForPackage(warp);
+            if(launch!=null){startActivity(launch);return;}
+            startActivity(new Intent(Intent.ACTION_VIEW,
+                Uri.parse("https://play.google.com/store/apps/details?id="+warp)));
+        }catch(Exception e){info("Could not open official Cloudflare WARP. Install its app from a trusted store.");}
     }
     void openVpnLocations(){
         screen.locationMode=0;screen.listOffset=0;tab=1;screen.invalidate();
@@ -184,6 +219,7 @@ public final class MainActivity extends Activity {
         directory.update(list -> {
             servers=list;
             if(selectedIndex>=servers.size()) selectedIndex=0;
+            openProbe.run(list,()->screen.invalidate());
             screen.invalidate();
             if(notify) Toast.makeText(this, list.size()+" free servers available",Toast.LENGTH_SHORT).show();
         }, err -> {if(notify)info("Directory refresh failed. Last saved servers retained.\n"+err);});
@@ -207,6 +243,7 @@ public final class MainActivity extends Activity {
             servers=list;
             if(selectedIndex>=servers.size())selectedIndex=0;
             persist();screen.invalidate();
+            openProbe.run(list,()->screen.invalidate());
             openVpnResult[0]="OpenVPN: "+list.size()+" free servers updated"+
                 (paidMode?" (paid profile preserved)":"; best advertised ping selected");
             finished.run();
@@ -585,7 +622,7 @@ public final class MainActivity extends Activity {
             p.setStyle(Paint.Style.FILL);
             header(c);
             c.save();c.translate(0,(1-pageAlpha)*16);c.saveLayerAlpha(0,94,W,H-74,(int)(255*Math.max(0,Math.min(1,pageAlpha))));
-            if(tab==0)home(c);else if(tab==1)locations(c);else stats(c);
+            if(tab==0)home(c);else if(tab==1)locations(c);else if(tab==2)stats(c);else backup(c);
             c.restore();c.restore();
             navbar(c);raw.restore();
         }
@@ -772,13 +809,29 @@ public final class MainActivity extends Activity {
             ink(c,"Network checks",42,553,14,INK,true);
             ink(c,"Refresh  ·  Test reachability from Locations",42,575,11,MUTED,false);
         }
+        void backup(Canvas c){
+            ink(c,"Backup connection",24,137,28,INK,true);
+            ink(c,"Independent provider option · no server is guaranteed",24,165,12,MUTED,false);
+            card(c,21,193,W-42,116,25,0xdfffffff);
+            ink(c,"Cloudflare WARP",43,236,20,INK,true);
+            ink(c,"Free official app · opens separately",43,261,12,MUTED,false);
+            ink(c,"›",W-60,268,33,0xff12a87e,true);
+            card(c,21,328,W-42,112,24,0xdfffffff);
+            ink(c,"Your own OpenVPN profile",43,370,18,INK,true);
+            ink(c,"Import an .ovpn config from your provider",43,395,12,MUTED,false);
+            ink(c,"›",W-60,402,32,ORANGE,true);
+            card(c,21,463,W-42,102,22,0xdfffffff);
+            ink(c,"Connection verification",43,499,16,INK,true);
+            ink(c,"A VPN icon or TCP ping alone does not confirm",43,522,12,MUTED,false);
+            ink(c,"that a proxy passes real Internet traffic.",43,541,12,MUTED,false);
+        }
         void navbar(Canvas c){
             float y=H-75;
             card(c,0,y,W,86,27,0xf5ffffff);
-            String[] labels={"Home","Locations","Stats"};
-            String[] symbols={"⌂","◎","▥"};
-            for(int i=0;i<3;i++){
-                float x=W*(i+.5f)/3;
+            String[] labels={"Home","Locations","Stats","Backup"};
+            String[] symbols={"⌂","◎","▥","◇"};
+            for(int i=0;i<4;i++){
+                float x=W*(i+.5f)/4;
                 int color=tab==i?ORANGE:MUTED;
                 center(c,symbols[i],x,y+34,27,color,true);
                 center(c,labels[i],x,y+60,12,color,tab==i);
@@ -814,8 +867,16 @@ public final class MainActivity extends Activity {
                     else if(x-downX>Math.min(58,W*.19f)||Math.abs(x-downX)<14)startVpn();
                     return true;
                 }
-                if(y>H-82){setTab(Math.min(2,(int)(x/W*3)));return true;}
+                if(y>H-82){setTab(Math.min(3,(int)(x/W*4)));return true;}
                 if(y<91){if(x<85)hubPanel.open();return true;}
+                if(tab==3){
+                    if(y>=193&&y<309){quickBackup();return true;}
+                    if(y>=328&&y<440){
+                        Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                        pick.setType("*/*");pick.addCategory(Intent.CATEGORY_OPENABLE);
+                        startActivityForResult(pick,PICK_OVPN);return true;
+                    }
+                }
                 if(tab==0){
                     float quickY=sliderY()+92+39;
                     if(y>quickY&&y<quickY+42){
@@ -844,8 +905,7 @@ public final class MainActivity extends Activity {
                         int index=(int)((y-(locationMode==1?320:280)+listOffset)/80);
                         if(index>=0&&index<rowCount()){
                             if(locationMode==0){
-                                if(isTunnelOn()||isConnecting())info("Disconnect first to select an OpenVPN relay.");
-                                else{selectedIndex=index;paidMode=false;preferNative=false;persist();setTab(0);invalidate();}
+                                selectOpenVpnServer(index);
                             }else{
                                 FeedParser.Entry entry=chosenEntries().get(index);
                                 if(locationMode==1)hubPanel.entry(entry);
