@@ -80,3 +80,13 @@ Public Telegram links/file-post references are also mirrored by GitHub Actions e
 - Additional country-labeled V2Ray feeds: US, Canada, France, Switzerland, Germany, UK, Netherlands, Japan, Singapore and Australia, sourced from `Mokafela/Config-Finder`. The country selector filters by **source label**, which may not represent the true exit country. Actual availability changes continuously.
 - Top-right settings icon was removed as requested. Settings are now accessible from the connection library; local manual server selection is unchanged by background updates.
 - The experimental debug artifact is only built for **arm64**. CI compilation is not equivalent to real-world network or device animation testing.
+
+## 0.8 · hardening after device feedback
+
+- Fixed missing `tls.utls` for VLESS+REALITY shares. Every REALITY outbound now explicitly enables a supported uTLS fingerprint, defaulting to chrome when the source omits `fp`; invalid public keys, short IDs, and unsupported transports are rejected before selection.
+- Native core initialization attempts to skip an incompatible auto-group node instead of failing all members of the group with `initialize outbound[N]`; no direct/bypass fallback is added.
+- Smart selection prefers diverse endpoints using the phone's own bounded TCP probes, followed by sing-box HTTP URLTest. TCP reachability **does not** guarantee a working proxy, and results from another geography/ISP cannot determine what is fastest on a user's network. No external publisher's speed or "alive" figures are presented as independently confirmed.
+- Independent MTProto sources added: `tgmtproxy/telegram-mtproto-proxy-list` and `shablin/mtproto-proxy`, with `SoliSpirit/mtproto` fallback. Public proxy availability changes and Telegram always confirms before enabling.
+- NPV screen explicitly says **three public post references, not three tunnel profiles**; only readable standard links in a post are importable. Encrypted `.npv`/`.npv4` remains unsupported without a compatible decoder.
+- The square application-icon bitmap is circularly clipped in the slider; the glow gradient is cached, idle ambient animation does not continuously run, and touch/slide easing is smoothed. Visual results and actual VPN connectivity still need Android hardware testing.
+- Do not put trust in public volunteer proxies for confidential traffic. A list being downloaded, a TUN being established, or a remote TCP socket being open is not equivalent to an end-to-end verified protected path.
