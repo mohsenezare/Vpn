@@ -205,6 +205,7 @@ public final class MainActivity extends Activity {
                 Uri.parse("https://play.google.com/store/apps/details?id="+warp)));
         }catch(Exception e){info("Could not open official Cloudflare WARP. Install its app from a trusted store.");}
     }
+    void openBackup(){tab=3;screen.invalidate();}
     void openVpnLocations(){
         screen.locationMode=0;screen.listOffset=0;tab=1;screen.invalidate();
     }
