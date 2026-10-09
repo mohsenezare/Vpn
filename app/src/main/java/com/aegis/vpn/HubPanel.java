@@ -9,10 +9,10 @@ final class HubPanel {
  final EndpointProbe probe=new EndpointProbe();
  HubPanel(MainActivity a,SourceHub h){activity=a;hub=h;}
  void open(){
-  String[] labels={"V2Ray / VLESS / VMess", "Telegram proxies", "NapsternetV files", hub.busy?"Updating sources…":"Update all sources", "Source status / last update", "OpenVPN: install connection engine"};
+  String[] labels={"V2Ray / VLESS / VMess", "Telegram proxies", "NapsternetV files", activity.updatingAll?"Updating all sources…":"Smart update all · best OpenVPN", "Source status / last update", "OpenVPN: install connection engine"};
   new GlassDialog.Builder(activity).setTitle("Connection library").setItems(labels,(d,w)->{
    if(w==0)list("V2RAY");if(w==1)list("PROXY");if(w==2)list("NAPSTERNETV");
-   if(w==3){if(hub.busy){activity.info("An update is already running.");return;}Toast.makeText(activity,"Updating 14 sources…",Toast.LENGTH_SHORT).show();hub.refresh(()->activity.info("Update finished. Check source status for unavailable feeds.\nV2Ray: "+hub.entries("V2RAY").size()+"\nProxies: "+hub.entries("PROXY").size()+"\nNapsternetV: "+hub.entries("NAPSTERNETV").size()));}
+   if(w==3)activity.refreshAll();
    if(w==4)activity.info(hub.report());
    if(w==5)launch("https://play.google.com/store/apps/details?id=de.blinkt.openvpn");
   }).setNegativeButton("Close",null).show();
