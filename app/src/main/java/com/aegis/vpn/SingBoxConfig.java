@@ -28,6 +28,39 @@ final class SingBoxConfig {
         cfg.put("route",new JSONObject().put("auto_detect_interface",true).put("final","proxy"));
         return cfg.toString();
     }
+    /**
+     * Multi-server configuration. The actual sing-box urltest outbound measures
+     * HTTP request latency through each remote proxy and switches to a viable one.
+     * This is stronger than VPN Gate's advertised ping or a bare TCP port probe.
+     */
+    static String buildAuto(List<String> links)throws Exception {
+        if(links==null||links.isEmpty())throw new IllegalArgumentException("No candidate nodes");
+        LinkedHashMap<String,JSONObject> candidates=new LinkedHashMap<>();
+        for(String link:links){
+            if(candidates.size()>=12)break;
+            if(link==null||candidates.containsKey(link))continue;
+            try{candidates.put(link,outbound(link));}
+            catch(Exception ignored){}
+        }
+        if(candidates.isEmpty())throw new IllegalArgumentException("No supported public nodes");
+        if(candidates.size()==1)return build(candidates.keySet().iterator().next());
+        JSONObject configuration=new JSONObject(build(candidates.keySet().iterator().next()));
+        JSONArray outputs=new JSONArray(),names=new JSONArray();
+        int i=0;
+        for(JSONObject node:candidates.values()){
+            String tag="node-"+i++;
+            node.put("tag",tag);
+            outputs.put(node);names.put(tag);
+        }
+        JSONObject tester=new JSONObject().put("type","urltest").put("tag","proxy")
+            .put("outbounds",names)
+            .put("url","https://www.gstatic.com/generate_204")
+            .put("interval","3m")
+            .put("tolerance",100);
+        outputs.put(tester).put(new JSONObject().put("type","direct").put("tag","direct"));
+        configuration.put("outbounds",outputs);
+        return configuration.toString();
+    }
     static JSONObject outbound(String link)throws Exception {
         if(link.startsWith("vmess://"))return vmess(link.substring(8));
         if(link.startsWith("ss://"))return shadowsocks(link.substring(5));
