@@ -313,9 +313,15 @@ public final class MainActivity extends Activity {
                 return Boolean.compare(!a.value.startsWith("vless://"),!b.value.startsWith("vless://"));
             });
             ArrayList<String> candidates=new ArrayList<>();
+            HashSet<String> usedHost=new HashSet<>();
             for(FeedParser.Entry e:choices){
                 if(candidates.size()>=12)break;
-                if(SingBoxConfig.supported(e.value))candidates.add(e.value);
+                try{
+                    org.json.JSONObject o=SingBoxConfig.outbound(e.value);
+                    String endpoint=o.getString("server")+":"+o.getInt("server_port");
+                    // Avoid 12 configs pointing at the same endpoint/IP.
+                    if(usedHost.add(endpoint))candidates.add(e.value);
+                }catch(Exception ignored){}
             }
             try{connectNative(SingBoxConfig.buildAuto(candidates));}
             catch(Exception ex){info("No supported native proxy config: "+ex.getMessage());}
@@ -749,7 +755,18 @@ public final class MainActivity extends Activity {
                 }else if(tab==1){
                     if(y>178&&y<215){
                         int next=Math.max(0,Math.min(3,(int)((x-21)/((W-46)/4))));
-                        if(next!=locationMode){locationMode=next;listOffset=0;invalidate();}
+                        if(next!=locationMode){
+                            locationMode=next;listOffset=0;listCacheAt=0;invalidate();
+                            if(next==2&&hubPanel.entries("PROXY").isEmpty()){
+                                hub.refreshCategory("PROXY",()->{
+                                    listCacheAt=0;invalidate();
+                                    if(hubPanel.entries("PROXY").isEmpty())
+                                        Toast.makeText(MainActivity.this,"Telegram feeds unavailable; use manual MTProto add",Toast.LENGTH_LONG).show();
+                                });
+                            }
+                            if(next==3&&hubPanel.entries("NAPSTERNETV").isEmpty())
+                                hub.refreshCategory("NAPSTERNETV",()->{listCacheAt=0;invalidate();});
+                        }
                         return true;
                     }
                     if(y>222&&y<271){refreshAll();return true;}
