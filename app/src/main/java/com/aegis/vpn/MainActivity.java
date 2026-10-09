@@ -132,10 +132,13 @@ public final class MainActivity extends Activity {
             finished.run();
         });
         hub.refresh(()->{
+            nativeCacheAt=0;
             sourceResult[0]="V2Ray: "+hub.entries("V2RAY").size()+
                 " | Proxies: "+hub.entries("PROXY").size()+
                 " | NapsternetV: "+hub.entries("NAPSTERNETV").size();
-            finished.run();
+            List<FeedParser.Entry> measured=hub.entries("V2RAY");
+            if(measured.isEmpty()||hubPanel.probe.busy){finished.run();return;}
+            hubPanel.probe.test(measured,finished);
         });
     }
     void showPaidCredentials(String ovpn){
@@ -169,10 +172,18 @@ public final class MainActivity extends Activity {
                 selectedIndex=which;paidMode=false;preferNative=false;persist();d.dismiss();screen.invalidate();
             }).setNegativeButton("Close",null).show();
     }
+    private boolean hasNativeCache;
+    private long nativeCacheAt;
     boolean hasNativeCandidates(){
         if(hub==null)return false;
-        for(FeedParser.Entry e:hub.entries("V2RAY"))if(SingBoxConfig.supported(e.value))return true;
-        return false;
+        long now=android.os.SystemClock.elapsedRealtime();
+        if(nativeCacheAt!=0&&now-nativeCacheAt<30000)return hasNativeCache;
+        hasNativeCache=false;
+        for(FeedParser.Entry e:hub.entries("V2RAY"))if(SingBoxConfig.supported(e.value)){
+            hasNativeCache=true;break;
+        }
+        nativeCacheAt=now;
+        return hasNativeCache;
     }
     void connectNativeEntry(String link){
         try{
