@@ -22,6 +22,7 @@ public final class MainActivity extends Activity {
     private VpnController vpn;
     private ProfileStore profiles;
     private SecureLinks vault;
+    private String selectedNativeCache="";
     private boolean smartNative=true;
     private FreeDirectory directory;
     private Screen screen;
@@ -51,6 +52,7 @@ public final class MainActivity extends Activity {
         getWindow().setNavigationBarColor(0xfff9fafb);
         profiles=new ProfileStore(this);
         vault=new SecureLinks(this);
+        selectedNativeCache=vault.selected();
         directory=new FreeDirectory(this);
         servers=directory.load();
         paidMode=getPreferences(MODE_PRIVATE).getBoolean("paid_mode",false);
@@ -127,7 +129,7 @@ public final class MainActivity extends Activity {
         if(isTunnelOn()||isConnecting()){info("Disconnect the current tunnel before changing server.");return;}
         try{
             if(!SingBoxConfig.supported(link))throw new IllegalArgumentException("Unsupported native configuration");
-            vault.select(link);smartNative=false;preferNative=true;paidMode=false;persist();screen.invalidate();
+            vault.select(link);selectedNativeCache=link;smartNative=false;preferNative=true;paidMode=false;persist();screen.invalidate();
             if(connectNow)connectNativeEntry(link);
             else Toast.makeText(this,"Server selected · swipe to connect",Toast.LENGTH_SHORT).show();
         }catch(Exception e){info(e.getMessage());}
@@ -135,7 +137,7 @@ public final class MainActivity extends Activity {
     void openVpnLocations(){
         screen.locationMode=0;screen.listOffset=0;tab=1;screen.invalidate();
     }
-    String chosenNative(){return vault==null?"":vault.selected();}
+    String chosenNative(){return selectedNativeCache;}
     private String readLimited(Uri uri)throws Exception{
         try(InputStream in=getContentResolver().openInputStream(uri);ByteArrayOutputStream out=new ByteArrayOutputStream()){
             byte[] buf=new byte[8192];int n;
@@ -180,7 +182,7 @@ public final class MainActivity extends Activity {
             finished.run();
         });
         hub.refresh(()->{
-            nativeCacheAt=0;
+            nativeCacheAt=0;screen.listCacheAt=0;
             sourceResult[0]="V2Ray: "+hub.entries("V2RAY").size()+
                 " | Proxies: "+hub.entries("PROXY").size()+
                 " | NapsternetV: "+hub.entries("NAPSTERNETV").size();
@@ -326,6 +328,9 @@ public final class MainActivity extends Activity {
     private class Screen extends View {
         final Paint p=new Paint(3),t=new Paint(3);
         float density=1,W,H,downX,downY,dragOffset,phase,listOffset,scrollStart;
+        int listCacheMode=-1;
+        long listCacheAt=0;
+        List<FeedParser.Entry> listCache=new ArrayList<>();
         int locationMode=0;boolean dragging,scrolling,wasOn;
         float knobProgress=0,pageAlpha=1;
         final android.animation.ValueAnimator ambient=android.animation.ValueAnimator.ofFloat(0,1);
@@ -519,9 +524,12 @@ public final class MainActivity extends Activity {
             ink(c,"— Mbps",W/2+56,statY+57,17,INK,true);
         }
         List<FeedParser.Entry> chosenEntries(){
+            long now=android.os.SystemClock.elapsedRealtime();
+            if(listCacheMode==locationMode&&now-listCacheAt<5000)return listCache;
             String k=locationMode==1?"V2RAY":locationMode==2?"PROXY":"NAPSTERNETV";
             ArrayList<FeedParser.Entry> data=new ArrayList<>(hubPanel.entries(k));
             if(locationMode==1)data.sort(Comparator.comparingLong(e->hubPanel.probe.rank(e.value)));
+            listCache=data;listCacheMode=locationMode;listCacheAt=now;
             return data;
         }
         int rowCount(){return locationMode==0?servers.size():chosenEntries().size();}
