@@ -16,6 +16,8 @@ public final class VpnController {
     private String pending;
     private boolean bound=false;
     private boolean requesting=false;
+    private final Handler timer=new Handler(Looper.getMainLooper());
+    private final Runnable timeout=()->{if(state==State.CONNECTING){disconnect();message.accept("The server did not establish a tunnel within 60 seconds. Try another server or network; importing a profile does not prove it is reachable.");}};
     VpnController(Activity activity,Runnable changed,java.util.function.Consumer<String> message){
         this.activity=activity;this.changed=changed;this.message=message;
     }
@@ -23,7 +25,7 @@ public final class VpnController {
         @Override public void newStatus(String uuid,String status,String text,String level){
             activity.runOnUiThread(()->{
                 String s=status==null?"":status.toUpperCase(java.util.Locale.ROOT);
-                if(s.equals("CONNECTED")){state=State.ON;changed.run();}
+                if(s.equals("CONNECTED")){timer.removeCallbacks(timeout);state=State.ON;changed.run();}
                 else if(s.equals("AUTH_FAILED")){
                     state=State.OFF;changed.run();message.accept("OpenVPN authentication failed.");
                 }else if(s.equals("NOPROCESS")||s.equals("EXITING")||s.equals("DISCONNECTED")){
@@ -66,6 +68,7 @@ public final class VpnController {
             if(b!=null){activity.startActivityForResult(b,ASK_VPN);return;}
             remote.registerStatusCallback(callback);
             remote.startVPN(pending);
+            timer.removeCallbacks(timeout);timer.postDelayed(timeout,60000);
             pending=null;requesting=false;
         }catch(Exception e){fail("OpenVPN service authorization/start failed: "+e.getMessage());}
     }
@@ -75,11 +78,13 @@ public final class VpnController {
         else beginAuthorized();
     }
     void disconnect(){
+        timer.removeCallbacks(timeout);
         try{if(remote!=null)remote.disconnect();}catch(Exception ignored){}
         requesting=false;pending=null;state=State.OFF;changed.run();
     }
     void fail(String why){pending=null;requesting=false;state=State.OFF;changed.run();message.accept(why);}
     void close(){
+        timer.removeCallbacks(timeout);
         try{if(remote!=null)remote.unregisterStatusCallback(callback);}catch(Exception ignored){}
         if(bound){try{activity.unbindService(service);}catch(Exception ignored){}}
         remote=null;bound=false;

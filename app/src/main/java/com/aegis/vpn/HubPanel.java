@@ -6,6 +6,7 @@ import android.widget.*;
 import java.util.*;
 final class HubPanel {
  final MainActivity activity;final SourceHub hub;
+ final EndpointProbe probe=new EndpointProbe();
  HubPanel(MainActivity a,SourceHub h){activity=a;hub=h;}
  void open(){
   String[] labels={"V2Ray / VLESS / VMess", "Telegram proxies", "NapsternetV files", hub.busy?"Updating sources…":"Update all sources", "Source status / last update", "OpenVPN: install connection engine"};
@@ -22,13 +23,19 @@ final class HubPanel {
    new GlassDialog.Builder(activity).setTitle(kind).setMessage("No recent configs cached. Update sources or open the source channels. Public previews may be blocked on your network.")
     .setPositiveButton("Channels",(d,w)->channels()).setNegativeButton("Close",null).show();return;
   }
+  entries.sort(java.util.Comparator.comparingLong(e->probe.rank(e.value)));
   String[] titles=new String[entries.size()];
   for(int i=0;i<titles.length;i++){
    FeedParser.Entry e=entries.get(i);String label=e.value.substring(0,e.value.indexOf(":")).toUpperCase(java.util.Locale.ROOT);
    Uri u=Uri.parse(e.value);String name=u.getFragment();
-   titles[i]=(i+1)+". "+label+(name==null?"":" · "+name.substring(0,Math.min(45,name.length())))+"\n"+e.source.replace("https://t.me/s/","@");
+   titles[i]=(i+1)+". "+label+(name==null?"":" · "+name.substring(0,Math.min(45,name.length())))+"\n"+(kind.equals("NAPSTERNETV")?"File post":probe.label(e.value))+" · "+e.source.replace("https://t.me/s/","@");
   }
-  new GlassDialog.Builder(activity).setTitle(kind+" · "+entries.size()).setItems(titles,(d,w)->entry(entries.get(w))).setNegativeButton("Close",null).show();
+  AlertDialog.Builder b=new GlassDialog.Builder(activity).setTitle(kind+" · "+entries.size()).setItems(titles,(d,w)->entry(entries.get(w))).setNegativeButton("Close",null);
+  if(!kind.equals("NAPSTERNETV"))b.setNeutralButton("Test TCP (40)",(d,w)->{
+   if(probe.busy){activity.info("Testing is already running.");return;}
+   Toast.makeText(activity,"Testing endpoint reachability, not VPN authentication…",Toast.LENGTH_LONG).show();
+   probe.test(entries,()->{if(!activity.isFinishing()&&!activity.isDestroyed())list(kind);});
+  });b.show();
  }
  void entry(FeedParser.Entry e){
   if(e.kind.equals("PROXY")){launch(e.value);return;}

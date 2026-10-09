@@ -4,7 +4,7 @@ on:
     branches: [main]
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 jobs:
   apk:
     runs-on: ubuntu-latest
@@ -32,3 +32,10 @@ jobs:
           name: AegisVPN-Android-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+      - name: Publish downloadable debug APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="build-${GITHUB_RUN_NUMBER}"
+          cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.4-debug.apk
+          gh release create "$tag" AegisVPN-v0.4-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.4 · build ${GITHUB_RUN_NUMBER}" --notes "Debug APK. OpenVPN requires OpenVPN for Android; V2Ray configs import into v2rayNG; Telegram proxies and NapsternetV file posts open externally. Connection on your ISP has not been verified."

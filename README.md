@@ -33,3 +33,4 @@ Credits: OpenVPN external API AIDL layout based on the Apache-2.0 licensed [ics-
 - Pure-Java parser regression tests run before the APK build.
 
 No embedded V2Ray or NapsternetV engine is included in 0.4. OpenVPN still uses OpenVPN for Android. APK/debug signing may differ between CI runners; uninstalling an older debug build can be required and deletes imported profiles. Export your original .ovpn first.
+- Optional endpoint testing measures TCP reachability for up to 40 configs/proxies on the phone and sorts measured results first. It is NOT a protocol handshake, speed test or proof of a working VPN; VMess and encoded Shadowsocks remain untested by this probe. OpenVPN connections time out visibly after 60 seconds.
