@@ -81,8 +81,8 @@ final class HubPanel {
   dialog.show();
   if(window!=null)window.setLayout(-1,-2);
   root.setTranslationY(px(100));root.setAlpha(.4f);
-  root.animate().translationY(0).alpha(1).setDuration(420)
-    .setInterpolator(new android.view.animation.OvershootInterpolator(.72f)).start();
+  root.animate().translationY(0).alpha(1).setDuration(310)
+    .setInterpolator(new android.view.animation.PathInterpolator(.18f,.8f,.22f,1f)).start();
  }
  void open(){
   sheet("Connection library","Choose manually, or let Smart Mode decide",(body,d)->{
