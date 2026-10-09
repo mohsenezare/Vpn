@@ -17,7 +17,8 @@ public final class VpnController {
     private boolean bound=false;
     private boolean requesting=false;
     private final Handler timer=new Handler(Looper.getMainLooper());
-    private final Runnable timeout=()->{if(state==State.CONNECTING){disconnect();message.accept("The server did not establish a tunnel within 60 seconds. Try another server or network; importing a profile does not prove it is reachable.");}};
+    private final Runnable timeout=this::onTimeout;
+    private void onTimeout(){if(state==State.CONNECTING){disconnect();message.accept("The server did not establish a tunnel within 60 seconds. Try another server or network; importing a profile does not prove it is reachable.");}}
     VpnController(Activity activity,Runnable changed,java.util.function.Consumer<String> message){
         this.activity=activity;this.changed=changed;this.message=message;
     }

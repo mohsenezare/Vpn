@@ -44,7 +44,9 @@ final class SourceHub {
     List<FeedParser.Entry> entries;
     long retrievedAt=System.currentTimeMillis();
     try{
-     entries=FeedParser.parse(get(s),s);
+     String body=get(s);
+     if(s.startsWith("https://t.me/s/")&&!java.util.regex.Pattern.compile("data-post=\""+java.util.regex.Pattern.quote(s.substring(s.lastIndexOf('/')+1))+"/[0-9]+\"",java.util.regex.Pattern.CASE_INSENSITIVE).matcher(body).find())throw new IOException("Preview does not match requested channel");
+     entries=FeedParser.parse(body,s);
      if(entries.isEmpty())throw new IOException("No supported configs in public preview");
     }catch(Exception directError){
      if(!s.startsWith("https://t.me/s/"))throw directError;
