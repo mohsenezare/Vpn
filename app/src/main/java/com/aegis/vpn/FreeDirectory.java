@@ -15,10 +15,15 @@ final class FreeDirectory {
     final Handler handler=new Handler(Looper.getMainLooper());
     static final class Node {
         final String country,host,config;final int ping;
+        final long speed,uptime;
         Node(String country,String host,String config,int ping){
-            this.country=country;this.host=host;this.config=config;this.ping=ping;
+            this(country,host,config,ping,0,0);
         }
-        String title(){return country+" · "+host+(ping>0?" · "+ping+"ms*":"");}
+        Node(String country,String host,String config,int ping,long speed,long uptime){
+            this.country=country;this.host=host;this.config=config;
+            this.ping=ping;this.speed=speed;this.uptime=uptime;
+        }
+        String title(){return country+" · "+host;}
     }
     FreeDirectory(Context c){context=c.getApplicationContext();}
     boolean isStale(){return System.currentTimeMillis()-context.getSharedPreferences("nodes",0).getLong("last",0)>21600000L;}
@@ -28,7 +33,8 @@ final class FreeDirectory {
             JSONArray arr=new JSONArray(context.getSharedPreferences("nodes",0).getString("data","[]"));
             for(int i=0;i<Math.min(LIMIT,arr.length());i++){
                 JSONObject j=arr.getJSONObject(i);
-                list.add(new Node(j.getString("country"),j.getString("host"),j.getString("ovpn"),j.optInt("ping")));
+                list.add(new Node(j.getString("country"),j.getString("host"),j.getString("ovpn"),
+                    j.optInt("ping"),j.optLong("speed"),j.optLong("uptime")));
             }
         }catch(Exception ignored){}
         return list;
@@ -42,6 +48,43 @@ final class FreeDirectory {
         },"free-directory").start();
     }
     static int parsePing(String value){try{return Integer.parseInt(value);}catch(Exception e){return 0;}}
+    static long number(String value){try{return Long.parseLong(value.trim());}catch(Exception e){return 0L;}}
+    static boolean tcp(String config){
+        return java.util.regex.Pattern.compile("(?im)^\\s*proto\\s+tcp").matcher(config).find();
+    }
+    static java.net.InetSocketAddress tcpEndpoint(Node node){
+        if(!tcp(node.config))return null;
+        java.util.regex.Matcher m=java.util.regex.Pattern
+            .compile("(?im)^\\s*remote\\s+([a-zA-Z0-9.:-]+)\\s+([0-9]{2,5})").matcher(node.config);
+        if(!m.find())return null;
+        int port=parsePing(m.group(2));
+        if(port<1||port>65535)return null;
+        return new java.net.InetSocketAddress(m.group(1),port);
+    }
+    static double rating(Node n){
+        // Publisher speed is in bit/s; neither this nor publisher ping
+        // guarantees an authenticated OpenVPN connection.
+        double speed=Math.log1p(Math.max(0,n.speed)/1_000_000.0);
+        double hours=Math.log1p(Math.max(0,n.uptime)/3600000.0);
+        double ping=n.ping>0?Math.min(n.ping,600):300;
+        return speed*2.4+hours*.50+(tcp(n.config)?2.0:0.0)-ping*.004;
+    }
+    static ArrayList<Node> diverse(List<Node> nodes,int limit){
+        ArrayList<Node> sorted=new ArrayList<>(nodes);
+        sorted.sort((a,b)->Double.compare(rating(b),rating(a)));
+        ArrayList<Node> result=new ArrayList<>();
+        HashMap<String,Integer> countries=new HashMap<>();
+        // Prevent dozens of claimed 2ms Japanese relays crowding out choices.
+        for(Node n:sorted){
+            int count=countries.getOrDefault(n.country,0);
+            if(count>=Math.max(9,limit/5))continue;
+            result.add(n);countries.put(n.country,count+1);
+            if(result.size()>=limit)break;
+        }
+        // Refill for sparse days when only a few countries report profiles.
+        for(Node n:sorted)if(result.size()<limit&&!result.contains(n))result.add(n);
+        return result;
+    }
     /** Fetch volunteer profiles; GitHub mirror serves as the bootstrap when VPN Gate is DNS-blocked. */
     ArrayList<Node> fetch() throws Exception {
         Exception primaryError=null;
@@ -93,12 +136,12 @@ final class FreeDirectory {
             if(!host.matches("[0-9a-fA-F.:]{7,48}")||!seen.add(host))continue;
             try {
                 String ovpn=new String(Base64.decode(col[14].trim(),Base64.DEFAULT),java.nio.charset.StandardCharsets.UTF_8);
-                if(valid(ovpn))result.add(new Node(col[5].trim(),host,ovpn,parsePing(col[3].trim())));
+                if(valid(ovpn))result.add(new Node(col[5].trim(),host,ovpn,
+                parsePing(col[3].trim()),number(col[4]),number(col[8])));
             }catch(Exception ignored){}
-            if(result.size()>=limit)break;
+            if(result.size()>=600)break;
         }
-        result.sort(Comparator.comparingInt(n->n.ping>0?n.ping:999999));
-        return result;
+        return diverse(result,limit);
     }
     private ArrayList<Node> parseMirror(byte[] raw) throws Exception {
         JSONObject root=new JSONObject(new String(raw,java.nio.charset.StandardCharsets.UTF_8));
@@ -111,17 +154,18 @@ final class FreeDirectory {
             JSONObject node=arr.getJSONObject(i);
             String host=node.optString("host"),config=node.optString("ovpn");
             if(!host.matches("[0-9a-fA-F.:]{7,48}")||!seen.add(host)||!valid(config))continue;
-            list.add(new Node(node.optString("country","Unknown"),host,config,node.optInt("ping")));
+            list.add(new Node(node.optString("country","Unknown"),host,config,
+                node.optInt("ping"),node.optLong("speed"),node.optLong("uptime")));
         }
-        list.sort(Comparator.comparingInt(n->n.ping>0?n.ping:999999));
-        return list;
+        return diverse(list,LIMIT);
     }
     private void save(ArrayList<Node> nodes)throws Exception {
         JSONArray json=new JSONArray();
         for(Node n:nodes){
             JSONObject j=new JSONObject();
             j.put("country",n.country);j.put("host",n.host);
-            j.put("ovpn",n.config);j.put("ping",n.ping);json.put(j);
+            j.put("ovpn",n.config);j.put("ping",n.ping);
+            j.put("speed",n.speed);j.put("uptime",n.uptime);json.put(j);
         }
         context.getSharedPreferences("nodes",0).edit()
            .putString("data",json.toString()).putLong("last",System.currentTimeMillis()).apply();
