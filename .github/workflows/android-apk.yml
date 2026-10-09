@@ -39,7 +39,7 @@ jobs:
           cd /tmp/sing-box
           test "$(git rev-parse HEAD)" = "f63091d14d8984d53dc9a5563cb72af978b9779e"
           gomobile bind -ldflags=-checklinkname=0 -target=android/arm64 -androidapi=26 -javapkg=io.nekohasekai -libname=box \
-            -tags="with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api" \
+            -tags="with_gvisor,with_quic,with_utls,with_clash_api" \
             ./experimental/libbox/
           mkdir -p "$GITHUB_WORKSPACE/app/libs"
           cp libbox.aar "$GITHUB_WORKSPACE/app/libs/libbox.aar"
@@ -60,5 +60,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="build-${GITHUB_RUN_NUMBER}"
-          cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.8.0-arm64-debug.apk
-          gh release create "$tag" AegisVPN-v0.8.0-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.8.0 · build ${GITHUB_RUN_NUMBER}" --notes "Experimental arm64 APK. Animated glass UI, manual and Smart proxy selection, encrypted saved configs, in-app text/clipboard/HTTPS importing, colored TCP delay list, native sing-box for supported share links. Telegram MTProto proxy opens directly in Telegram for approval; encrypted .npv files unsupported. Paid and volunteer OpenVPN profiles require OpenVPN for Android. Upstream network success is unverified." || echo "Release publishing unavailable (GitHub App permissions); APK artifact was successfully uploaded."
+          cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.9.0-arm64-debug.apk
+          gh release create "$tag" AegisVPN-v0.9.0-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.9.0 · build ${GITHUB_RUN_NUMBER}" --notes "Experimental arm64 APK. Reverted to v0.5 core source ranking and 3-minute URLTest, maintained manual selection. Center control immediately stops/cancels native VPN; no forced HTTP-watchdog restart. Cached frosted-glass UI with vibrant backdrop. Removed non-operational NPV menu; separate public MTProto list and Telegram confirmation. Public proxies remain unverified on user's network; OpenVPN still requires companion app." || echo "Release publishing unavailable (GitHub App permissions); APK artifact was successfully uploaded."
