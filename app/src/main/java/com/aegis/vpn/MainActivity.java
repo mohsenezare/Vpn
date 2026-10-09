@@ -160,6 +160,17 @@ public final class MainActivity extends Activity {
         screen.locationMode=0;screen.listOffset=0;tab=1;screen.invalidate();
     }
     String chosenNative(){return selectedNativeCache;}
+    void countryPicker(){
+        final String[] codes={"","US","CA","FR","CH","DE","GB","NL","JP","SG","AU"};
+        final String[] labels={"All available servers","United States · US","Canada · CA",
+            "France · FR","Switzerland · CH","Germany · DE","United Kingdom · GB",
+            "Netherlands · NL","Japan · JP","Singapore · SG","Australia · AU"};
+        new GlassDialog.Builder(this).setTitle("V2Ray source country")
+            .setSingleChoiceItems(labels,0,(d,index)->{
+                screen.countryFilter=codes[index];
+                screen.listCacheAt=0;screen.listOffset=0;screen.invalidate();d.dismiss();
+            }).setNegativeButton("Close",null).show();
+    }
     private String readLimited(Uri uri)throws Exception{
         try(InputStream in=getContentResolver().openInputStream(uri);ByteArrayOutputStream out=new ByteArrayOutputStream()){
             byte[] buf=new byte[8192];int n;
@@ -353,7 +364,7 @@ public final class MainActivity extends Activity {
         int listCacheMode=-1;
         long listCacheAt=0;
         List<FeedParser.Entry> listCache=new ArrayList<>();
-        int locationMode=0;boolean dragging,scrolling,wasOn;
+        int locationMode=0;String countryFilter="";boolean dragging,scrolling,wasOn;
         float knobProgress=0,pageAlpha=1;
         final android.animation.ValueAnimator ambient=android.animation.ValueAnimator.ofFloat(0,1);
         private long lastAmbientFrame=0;
@@ -564,7 +575,10 @@ public final class MainActivity extends Activity {
             if(listCacheMode==locationMode&&now-listCacheAt<5000)return listCache;
             String k=locationMode==1?"V2RAY":locationMode==2?"PROXY":"NAPSTERNETV";
             ArrayList<FeedParser.Entry> data=new ArrayList<>(hubPanel.entries(k));
-            if(locationMode==1)data.sort(Comparator.comparingLong(e->hubPanel.probe.rank(e.value)));
+            if(locationMode==1){
+                if(!countryFilter.isEmpty())data.removeIf(e->!countryFilter.equals(SourceHub.country(e.source)));
+                data.sort(Comparator.comparingLong(e->hubPanel.probe.rank(e.value)));
+            }
             listCache=data;listCacheMode=locationMode;listCacheAt=now;
             return data;
         }
@@ -581,12 +595,16 @@ public final class MainActivity extends Activity {
             }
             card(c,21,222,W-42,44,19,0xeaffffff);
             ink(c,updatingAll?"◌  Updating sources…":"↻  Smart update all sources",39,249,14,ORANGE,true);
-            final float top=280,bottom=H-96,step=80;
+            if(locationMode==1){
+                card(c,21,274,W-42,36,17,0xdfffffff);
+                ink(c,"Country source: "+(countryFilter.isEmpty()?"All":countryFilter)+"    ▼",38,297,13,INK,true);
+            }
+            final float top=locationMode==1?320:280,bottom=H-96,step=80;
             c.save();c.clipRect(0,top,W,bottom);
             int count=rowCount();
             if(count==0){
-                ink(c,"No saved servers in this category",32,323,16,INK,true);
-                ink(c,"Tap update or import a configuration",32,347,12,MUTED,false);
+                ink(c,"No saved servers in this category",32,locationMode==1?373:323,16,INK,true);
+                ink(c,"Tap update or import a configuration",32,locationMode==1?397:347,12,MUTED,false);
             }else{
                 List<FeedParser.Entry> entries=locationMode==0?Collections.emptyList():chosenEntries();
                 for(int i=0;i<count;i++){
@@ -623,7 +641,7 @@ public final class MainActivity extends Activity {
                 }
             }
             c.restore();
-            ink(c,locationMode==0?"* VPN Gate directory-reported delay":"Colored delay is TCP reachability, not VPN speed",
+            ink(c,locationMode==0?"* VPN Gate directory-reported delay":locationMode==1?"Country is source-labeled; delay is TCP only":"Colored delay is TCP reachability, not VPN speed",
                 26,H-88,10,MUTED,false);
         }
         void stats(Canvas c){
@@ -659,7 +677,7 @@ public final class MainActivity extends Activity {
             float x=e.getX()/density,y=e.getY()/density,sy=sliderY();
             if(e.getAction()==MotionEvent.ACTION_DOWN){
                 downX=x;downY=y;scrollStart=listOffset;dragging=tab==0&&y>sy&&y<sy+96;
-                scrolling=tab==1&&y>280&&y<H-95;return true;
+                scrolling=tab==1&&y>(locationMode==1?320:280)&&y<H-95;return true;
             }
             if(e.getAction()==MotionEvent.ACTION_CANCEL){
                 dragging=false;scrolling=false;dragOffset=0;invalidate();return true;
@@ -671,7 +689,7 @@ public final class MainActivity extends Activity {
                     invalidate();return true;
                 }
                 if(scrolling){
-                    listOffset=Math.max(0,Math.min(Math.max(0,rowCount()*80-(H-96-280)),scrollStart+downY-y));
+                    listOffset=Math.max(0,Math.min(Math.max(0,rowCount()*80-(H-96-(locationMode==1?320:280))),scrollStart+downY-y));
                     invalidate();return true;
                 }
             }
@@ -702,9 +720,10 @@ public final class MainActivity extends Activity {
                         return true;
                     }
                     if(y>222&&y<271){refreshAll();return true;}
+                    if(locationMode==1&&y>274&&y<315){countryPicker();return true;}
                     if(scrolling&&Math.abs(y-downY)>12){scrolling=false;return true;}
-                    if(y>=280&&y<H-95){
-                        int index=(int)((y-280+listOffset)/80);
+                    if(y>=(locationMode==1?320:280)&&y<H-95){
+                        int index=(int)((y-(locationMode==1?320:280)+listOffset)/80);
                         if(index>=0&&index<rowCount()){
                             if(locationMode==0){
                                 if(isTunnelOn()||isConnecting())info("Disconnect first to select an OpenVPN relay.");
