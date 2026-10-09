@@ -411,6 +411,7 @@ public final class MainActivity extends Activity {
             ambient.cancel();
             if(slide!=null)slide.cancel();if(page!=null)page.cancel();
             if(frostBitmap!=null){frostBitmap.recycle();frostBitmap=null;frostShader=null;}
+            cachedW=-1;cachedH=-1;
             super.onDetachedFromWindow();
         }
         @Override protected void onWindowVisibilityChanged(int v){
