@@ -35,6 +35,7 @@ public final class SingVpnService extends VpnService {
     private ScheduledExecutorService watchdog;
     private final AtomicBoolean restarting=new AtomicBoolean(false);
     private int failedHealthChecks=0,restarts=0;
+    private volatile boolean everVerified=false;
     private long lastRecoveryAt=0;
     public static volatile boolean verifiedRoute=false;
     @Override public void onCreate(){
@@ -109,10 +110,10 @@ public final class SingVpnService extends VpnService {
                 if(vpnNetwork==null)return;
                 boolean good=checkRoute(vpnNetwork,"https://www.gstatic.com/generate_204",204)||
                     checkRoute(vpnNetwork,"https://www.cloudflare.com/cdn-cgi/trace",200);
-                if(good){failedHealthChecks=0;verifiedRoute=true;return;}
+                if(good){failedHealthChecks=0;verifiedRoute=true;everVerified=true;return;}
                 verifiedRoute=false;
                 failedHealthChecks++;
-                if(failedHealthChecks<3||restarts>=4||
+                if(!everVerified||failedHealthChecks<3||restarts>=4||
                     android.os.SystemClock.elapsedRealtime()-lastRecoveryAt<90000L)return;
                 if(!restarting.compareAndSet(false,true))return;
                 lastRecoveryAt=android.os.SystemClock.elapsedRealtime();
@@ -141,7 +142,7 @@ public final class SingVpnService extends VpnService {
     }
     private void stopWatchdog(){
         if(watchdog!=null){watchdog.shutdownNow();watchdog=null;}
-        failedHealthChecks=0;verifiedRoute=false;
+        failedHealthChecks=0;verifiedRoute=false;everVerified=false;
     }
     private android.app.Notification notification(String status){
         Intent open=new Intent(this,MainActivity.class);
