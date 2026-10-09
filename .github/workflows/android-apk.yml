@@ -60,5 +60,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="build-${GITHUB_RUN_NUMBER}"
-          cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.5.0-arm64-debug.apk
-          gh release create "$tag" AegisVPN-v0.5.0-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.5.0 · build ${GITHUB_RUN_NUMBER}" --notes "Debug APK. OpenVPN requires OpenVPN for Android; Embedded sing-box native tunnel for VLESS/VMess/Trojan/SS/Hysteria2; Telegram proxies and NapsternetV file posts open externally. Connection on your ISP has not been verified."
+          cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.6.0-arm64-debug.apk
+          gh release create "$tag" AegisVPN-v0.6.0-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.6.0 · build ${GITHUB_RUN_NUMBER}" --notes "Experimental arm64 APK. Animated glass UI, manual and Smart proxy selection, encrypted saved configs, in-app text/clipboard/HTTPS importing, colored TCP delay list, native sing-box for supported share links. Telegram MTProto proxy opens directly in Telegram for approval; encrypted .npv files unsupported. Paid and volunteer OpenVPN profiles require OpenVPN for Android. Upstream network success is unverified."
