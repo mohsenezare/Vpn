@@ -197,7 +197,7 @@ final class SingBoxConfig {
         try{
             if(error==null)return null;
             java.util.regex.Matcher m=java.util.regex.Pattern
-                .compile("(?i)outbound\\\\[([0-9]+)\\\\]").matcher(error);
+                .compile("(?i)outbound\\[([0-9]+)\\]").matcher(error);
             if(!m.find())return null;
             int index=Integer.parseInt(m.group(1));
             JSONObject root=new JSONObject(config);
