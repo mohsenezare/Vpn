@@ -212,6 +212,10 @@ final class HubPanel {
  }
  void telegramMenu(){
   sheet("Telegram proxies","Add directly to Telegram — no channel access required",(body,d)->{
+   row(body,"↻ Refresh MTProto only","Update public proxy list without waiting for VPN feeds",0xff15a98e,()->{
+    d.dismiss();Toast.makeText(activity,"Updating Telegram proxies…",Toast.LENGTH_SHORT).show();
+    hub.refreshCategory("PROXY",()->list("PROXY"));
+   });
    row(body,"+ Enter MTProto proxy","Server · port · secret",0xff279fd8,()->{d.dismiss();telegramForm();});
    row(body,"Available public proxies","Select a saved or public proxy",0xff45a3e1,()->{d.dismiss();list("PROXY");});
    row(body,"Import Telegram proxy URL","Accept tg://proxy and t.me/proxy links",0xff799ee1,()->{d.dismiss();paste("PROXY");});
@@ -252,6 +256,10 @@ final class HubPanel {
  }
  void napsterMenu(){
   sheet("NapsternetV configs","Import into Aegis when text links are compatible",(body,d)->{
+   row(body,"↻ Update three recent NPV posts","Read latest three available NPV attachment posts from @mitivpn",0xffd65fa8,()->{
+    d.dismiss();Toast.makeText(activity,"Refreshing last 3 NPV posts…",Toast.LENGTH_SHORT).show();
+    hub.refreshCategory("NAPSTERNETV",()->list("NAPSTERNETV"));
+   });
    row(body,"Paste config or subscription","VLESS, VMess, Trojan, SS, HY2 share links",0xffe75a98,()->{d.dismiss();paste("V2RAY");});
    row(body,"Import from clipboard","Use copied readable share links without Telegram",0xff39b7b1,()->{d.dismiss();clipboard();});
    row(body,"Import local file","Supports plain-text share links and Base64 lists",0xff9f6bed,()->{d.dismiss();activity.pickConfigFile();});
