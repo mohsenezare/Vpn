@@ -57,3 +57,15 @@ Public Telegram links/file-post references are also mirrored by GitHub Actions e
 - The APK is not yet production verified: **CI compilation and real-device network tests are separate requirements**. Until an Android device has successfully connected through the tunnel, this remains an experimental build.
 - Only `arm64-v8a` devices are supported by the new native artifact; other ABIs need dedicated builds.
 - GPL-3.0 notice: sing-box is copyrighted by its upstream authors and licensed under GPL-3.0-or-later; the source tree and build process are available publicly for review. See the upstream [sing-box LICENSE](https://github.com/SagerNet/sing-box/blob/v1.12.22/LICENSE).
+
+## 0.6 · visual and manual-control update
+
+- Home layout now follows the approved reference more closely: a three-line hero, luminous orange/green connect control, soft glass location/traffic cards and fixed bottom navigation. The slider interpolates with a spring; breathing rings and responsive tab fades are real animations.
+- Connection library opens as bottom sheets with swipeable lists, colored VLESS/VMess/Trojan/Shadowsocks/Hysteria2 markers, colored **TCP latency** pills, and separate actions to pin a server, connect, test, copy or delete.
+- Manual native selection is encrypted in Android Keystore and **not overridden** by Smart refresh. Smart mode is still available and creates a sing-box urltest group of up to twelve candidates.
+- Locations has dedicated OpenVPN, native V2Ray, Telegram MTProto, and NapsternetV/source categories, with vertical scrolling. VPN Gate GitHub source cache can hold up to 80 volunteer profiles when upstream provides them; actual country coverage depends on available servers.
+- Telegram MTProto can be typed manually or selected from public sources, with an explicit "Add to Telegram" link; the user approves the proxy in Telegram, no Telegram account permissions needed.
+- Config import accepts readable share links from clipboard, plaintext file, paste, or manually provided HTTPS subscription. Support for proprietary encrypted `.npv`/`.npv4` **is not implemented**. NapsternetV public post URLs are *references* and not usable tunnel profiles; unsupported file posts are not mislabeled as VPN connections.
+- Further public V2Ray and Hysteria2 feeds have been added, but their endpoints are untrusted and may be unavailable. A TCP test only proves the port's preliminary reachability, not VPN authentication or working traffic.
+- Displayed download/upload speeds remain blank rather than fabricated until real tunnel telemetry is implemented. A tun interface is not a guarantee of end-to-end protection.
+- This build is Android arm64 (API 26+) debug/pre-release. GitHub CI proves compile and artifact generation; real-device visual performance, connectivity and Telegram intents still require device testing.
