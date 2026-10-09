@@ -277,8 +277,14 @@ final class HubPanel {
   new Thread(()->{
    try{
     // Public Telegram preview. We do not download or execute proprietary attachments.
-    String page=SourceHub.get("https://t.me/s/npv_iran?before="+(id+1));
-    String mark="data-post=\\\"npv_iran/"+id+"\\\"";
+    Uri post=Uri.parse(link);
+    java.util.List<String> segments=post.getPathSegments();
+    if(segments.size()<2)throw new Exception("Invalid public post URL");
+    String channel=segments.get(0);
+    if(!channel.equals("mitivpn")&&!channel.equals("npv_iran"))
+      throw new Exception("Unsupported public source channel");
+    String page=SourceHub.get("https://t.me/s/"+channel+"?before="+(id+1));
+    String mark="data-post=\\\""+channel+"/"+id+"\\\"";
     int start=page.indexOf(mark);
     if(start<0)throw new Exception("The post is not currently available in the public preview.");
     int end=page.indexOf("data-post=",start+mark.length());
