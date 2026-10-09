@@ -34,3 +34,5 @@ Credits: OpenVPN external API AIDL layout based on the Apache-2.0 licensed [ics-
 
 No embedded V2Ray or NapsternetV engine is included in 0.4. OpenVPN still uses OpenVPN for Android. APK/debug signing may differ between CI runners; uninstalling an older debug build can be required and deletes imported profiles. Export your original .ovpn first.
 - Optional endpoint testing measures TCP reachability for up to 40 configs/proxies on the phone and sorts measured results first. It is NOT a protocol handshake, speed test or proof of a working VPN; VMess and encoded Shadowsocks remain untested by this probe. OpenVPN connections time out visibly after 60 seconds.
+
+Public Telegram links/file-post references are also mirrored by GitHub Actions every four hours (best effort). The app falls back to this GitHub mirror when Telegram previews are blocked, retains original update times and rejects mirrors older than 72 hours. The collector never logs private account profiles or credentials, and failure retains earlier files. Workflow schedules may be delayed or disabled by GitHub for inactive repositories.

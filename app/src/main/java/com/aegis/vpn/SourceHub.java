@@ -41,15 +41,31 @@ final class SourceHub {
   List<Callable<Void>> jobs=new ArrayList<>();
   for(String s:sources())jobs.add(()->{
    try{
-    List<FeedParser.Entry> entries=FeedParser.parse(get(s),s);
-    if(entries.isEmpty())throw new IOException("No supported configs in public preview");
+    List<FeedParser.Entry> entries;
+    long retrievedAt=System.currentTimeMillis();
+    try{
+     entries=FeedParser.parse(get(s),s);
+     if(entries.isEmpty())throw new IOException("No supported configs in public preview");
+    }catch(Exception directError){
+     if(!s.startsWith("https://t.me/s/"))throw directError;
+     JSONObject mirror=new JSONObject(get("https://raw.githubusercontent.com/mohsenezare/Vpn/main/feeds/"+s.substring(s.lastIndexOf('/')+1)+".json"));
+     retrievedAt=mirror.getLong("updated");
+     if(System.currentTimeMillis()-retrievedAt>259200000L)throw new IOException("Public mirror is older than 72 hours");
+     JSONArray data=mirror.getJSONArray("entries");entries=new ArrayList<>();
+     for(int i=0;i<Math.min(350,data.length());i++){
+      JSONObject o=data.getJSONObject(i);String kind=o.getString("k"),v=o.getString("v");
+      if(kind.equals("NAPSTERNETV")&&v.matches("https://t\\.me/[A-Za-z0-9_]+/[0-9]+"))entries.add(new FeedParser.Entry(kind,v,s));
+      else entries.addAll(FeedParser.parse(v,s));
+     }
+     if(entries.isEmpty())throw new IOException("No valid configs in public mirror");
+    }
     JSONArray a=new JSONArray();
     for(FeedParser.Entry e:entries){JSONObject o=new JSONObject();o.put("k",e.kind);o.put("v",e.value);a.put(o);}
-    context.getSharedPreferences("hub",0).edit().putString(s,a.toString()).putLong(s+"time",System.currentTimeMillis()).putString(s+"error","").apply();
+    context.getSharedPreferences("hub",0).edit().putString(s,a.toString()).putLong(s+"time",retrievedAt).putString(s+"error","").apply();
    }catch(Exception e){context.getSharedPreferences("hub",0).edit().putString(s+"error",e.getMessage()==null?"Network error":e.getMessage()).apply();}
    return null;
   });
-  try{pool.invokeAll(jobs,55,TimeUnit.SECONDS);}catch(InterruptedException e){Thread.currentThread().interrupt();}finally{pool.shutdownNow();context.getSharedPreferences("hub",0).edit().putLong("attempt",System.currentTimeMillis()).apply();}
+  try{pool.invokeAll(jobs,90,TimeUnit.SECONDS);}catch(InterruptedException e){Thread.currentThread().interrupt();}finally{pool.shutdownNow();context.getSharedPreferences("hub",0).edit().putLong("attempt",System.currentTimeMillis()).apply();}
  }
  List<FeedParser.Entry> entries(String kind){
   LinkedHashMap<String,FeedParser.Entry> result=new LinkedHashMap<>();
