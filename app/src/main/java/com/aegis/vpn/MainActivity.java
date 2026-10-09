@@ -26,7 +26,7 @@ public final class MainActivity extends Activity {
     private HubPanel hubPanel;
     private int tab=0, selectedIndex=0;
     private boolean paidMode=false;
-    private boolean updatingAll=false;
+    boolean updatingAll=false;
     private String error="";
     private ArrayList<FreeDirectory.Node> servers=new ArrayList<>();
     private Handler handler=new Handler(Looper.getMainLooper());
