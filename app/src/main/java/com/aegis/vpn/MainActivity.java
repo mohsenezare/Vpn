@@ -438,7 +438,7 @@ public final class MainActivity extends Activity {
             center(c,"⚙",W-42,66,22,0xff606e79,false);
         }
         float sliderY(){return H*.409f;}
-        float serverY(){return Math.max(sliderY()+164,Math.min(H*.646f,H-216));}
+        float serverY(){return Math.min(Math.max(sliderY()+175,H*.655f),H-250);}
         void home(Canvas c){
             float titleY=Math.max(151,H*.198f);
             ink(c,"Private.",27,titleY,36,INK,true);
@@ -484,13 +484,13 @@ public final class MainActivity extends Activity {
                 connecting?"Establishing your secure connection":"Slide or tap the glowing button",
                 W/2,sy+sh+32,11.5f,on?0xff288e6e:MUTED,false);
             // Clear separation between Smart refresh and manual selection.
-            float quickY=sy+sh+51;
+            float quickY=sy+sh+39;
             card(c,24,quickY,(W-56)/2,36,18,0xdbffffff);
             card(c,W/2+4,quickY,(W-56)/2,36,18,0xdbffffff);
             center(c,"↻ Smart update",24+(W-56)/4f,quickY+23,12.5f,ORANGE,true);
             center(c,"☷ Choose server",W*.75f+1,quickY+23,12.5f,INK,true);
             float y=serverY();
-            card(c,21,y,W-42,87,25,0xeefeffff);
+            card(c,21,y,W-42,78,25,0xeefeffff);
             circle(c,61,y+44,26,0xfff2f8fa);
             if(!paidMode&&preferNative)ink(c,"◈",46,y+55,33,0xff8b67f1,true);
             else ink(c,"◉",46,y+54,29,0xfff59440,true);
@@ -508,15 +508,15 @@ public final class MainActivity extends Activity {
             ink(c,cut(title,(int)(W-145),16),101,y+35,16,INK,true);
             ink(c,cut(subtitle,(int)(W-147),12),101,y+58,12,MUTED,false);
             ink(c,"›",W-51,y+56,31,0xff99a8b0,false);
-            float statY=y+105;
-            card(c,21,statY,W-42,92,24,0xeefeffff);
-            p.setColor(0xffe6eeee);c.drawRect(W/2-1,statY+17,W/2,statY+75,p);
-            ink(c,"↓",41,statY+57,35,on?GREEN:ORANGE,true);
-            ink(c,"Download",82,statY+35,12,MUTED,false);
-            ink(c,"— Mbps",82,statY+59,17,INK,true);
-            ink(c,"↑",W/2+17,statY+57,34,on?GREEN:ORANGE,true);
-            ink(c,"Upload",W/2+56,statY+35,12,MUTED,false);
-            ink(c,"— Mbps",W/2+56,statY+59,17,INK,true);
+            float statY=y+92;
+            card(c,21,statY,W-42,80,24,0xeefeffff);
+            p.setColor(0xffe6eeee);c.drawRect(W/2-1,statY+12,W/2,statY+69,p);
+            ink(c,"↓",41,statY+55,35,on?GREEN:ORANGE,true);
+            ink(c,"Download",82,statY+31,12,MUTED,false);
+            ink(c,"— Mbps",82,statY+57,17,INK,true);
+            ink(c,"↑",W/2+17,statY+55,34,on?GREEN:ORANGE,true);
+            ink(c,"Upload",W/2+56,statY+31,12,MUTED,false);
+            ink(c,"— Mbps",W/2+56,statY+57,17,INK,true);
         }
         List<FeedParser.Entry> chosenEntries(){
             String k=locationMode==1?"V2RAY":locationMode==2?"PROXY":"NAPSTERNETV";
@@ -646,11 +646,11 @@ public final class MainActivity extends Activity {
                 if(y>H-82){setTab(Math.min(2,(int)(x/W*3)));return true;}
                 if(y<91){if(x<85)hubPanel.open();else if(x>W-85)showSettings();return true;}
                 if(tab==0){
-                    float quickY=sliderY()+92+51;
+                    float quickY=sliderY()+92+39;
                     if(y>quickY&&y<quickY+42){
                         if(x<W/2)refreshAll();else hubPanel.open();return true;
                     }
-                    if(y>serverY()&&y<serverY()+91){hubPanel.open();return true;}
+                    if(y>serverY()&&y<serverY()+81){hubPanel.open();return true;}
                 }else if(tab==1){
                     if(y>178&&y<215){
                         int next=Math.max(0,Math.min(3,(int)((x-21)/((W-46)/4))));
