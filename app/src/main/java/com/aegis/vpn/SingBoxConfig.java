@@ -55,7 +55,7 @@ final class SingBoxConfig {
         JSONObject tester=new JSONObject().put("type","urltest").put("tag","proxy")
             .put("outbounds",names)
             .put("url","https://www.gstatic.com/generate_204")
-            .put("interval","20s")
+            .put("interval","3m")
             .put("tolerance",100);
         outputs.put(tester).put(new JSONObject().put("type","direct").put("tag","direct"));
         configuration.put("outbounds",outputs);
