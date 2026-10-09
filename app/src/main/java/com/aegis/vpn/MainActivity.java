@@ -17,9 +17,12 @@ import java.util.*;
  */
 public final class MainActivity extends Activity {
     private static final int PICK_OVPN = 813;
+    private static final int PICK_NATIVE = 815;
     final int INK=0xff162025, MUTED=0xff7f8b98, ORANGE=0xffff7528, GREEN=0xff08bb78;
     private VpnController vpn;
     private ProfileStore profiles;
+    private SecureLinks vault;
+    private boolean smartNative=true;
     private FreeDirectory directory;
     private Screen screen;
     private SourceHub hub;
@@ -47,10 +50,12 @@ public final class MainActivity extends Activity {
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         getWindow().setNavigationBarColor(0xfff9fafb);
         profiles=new ProfileStore(this);
+        vault=new SecureLinks(this);
         directory=new FreeDirectory(this);
         servers=directory.load();
         paidMode=getPreferences(MODE_PRIVATE).getBoolean("paid_mode",false);
         preferNative=getPreferences(MODE_PRIVATE).getBoolean("prefer_native",true);
+        smartNative=getPreferences(MODE_PRIVATE).getBoolean("smart_native",true);
         selectedIndex=getPreferences(MODE_PRIVATE).getInt("selected",0);
         vpn=new VpnController(this, () -> screen.invalidate(), msg -> {
             new GlassDialog.Builder(this).setTitle("OpenVPN").setMessage(msg).setPositiveButton("OK",null).show();
@@ -78,6 +83,9 @@ public final class MainActivity extends Activity {
             }else{pendingNativeConfig=null;info("VPN permission was not granted.");}
             return;
         }
+        if(request==PICK_NATIVE && result==RESULT_OK && data!=null && data.getData()!=null){
+            importNativeFile(data.getData());return;
+        }
         if(request==PICK_OVPN && result==RESULT_OK && data!=null && data.getData()!=null) {
             try{
                 String ovpn=readLimited(data.getData());
@@ -87,6 +95,47 @@ public final class MainActivity extends Activity {
             } catch(Exception e){ info(e.getMessage());}
         } else vpn.onActivityResult(request,result);
     }
+    void pickConfigFile(){
+        Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        pick.setType("*/*");pick.addCategory(Intent.CATEGORY_OPENABLE);
+        startActivityForResult(pick,PICK_NATIVE);
+    }
+    void importNativeFile(Uri uri){
+        try{
+            String name=uri.getLastPathSegment();
+            if(name!=null&&name.toLowerCase(Locale.ROOT).matches(".*\\.(npv|npv4|npvt)$")){
+                info("Encrypted NapsternetV files require their original decoder. Aegis supports readable share links and subscriptions instead.");
+                return;
+            }
+            String body=readLimited(uri);
+            if(body.indexOf(0)>=0)throw new IllegalArgumentException("Encrypted or binary input is unsupported");
+            List<FeedParser.Entry> parsed=FeedParser.parse(body,"Imported file");
+            int n=0;
+            for(FeedParser.Entry e:parsed)if(e.kind.equals("V2RAY")&&SingBoxConfig.supported(e.value)){
+                vault.put("V2RAY",e.value);n++;
+            }
+            if(n==0)info("No readable VLESS, VMess, Trojan, Shadowsocks or Hysteria2 links in file. Proprietary encrypted .npv files are not directly supported.");
+            else{Toast.makeText(this,n+" VPN configurations imported securely",Toast.LENGTH_LONG).show();hubPanel.list("V2RAY");}
+        }catch(Exception e){info("Could not import file: "+e.getMessage());}
+    }
+    void chooseSmartMode(){
+        if(isTunnelOn()||isConnecting()){info("Disconnect the current tunnel before changing connection mode.");return;}
+        smartNative=true;paidMode=false;preferNative=true;persist();screen.invalidate();
+        Toast.makeText(this,"Smart Mode selected · swipe to connect",Toast.LENGTH_SHORT).show();
+    }
+    void selectManualNative(String link,boolean connectNow){
+        if(isTunnelOn()||isConnecting()){info("Disconnect the current tunnel before changing server.");return;}
+        try{
+            if(!SingBoxConfig.supported(link))throw new IllegalArgumentException("Unsupported native configuration");
+            vault.select(link);smartNative=false;preferNative=true;paidMode=false;persist();screen.invalidate();
+            if(connectNow)connectNativeEntry(link);
+            else Toast.makeText(this,"Server selected · swipe to connect",Toast.LENGTH_SHORT).show();
+        }catch(Exception e){info(e.getMessage());}
+    }
+    void openVpnLocations(){
+        screen.locationMode=0;screen.listOffset=0;tab=1;screen.invalidate();
+    }
+    String chosenNative(){return vault==null?"":vault.selected();}
     private String readLimited(Uri uri)throws Exception{
         try(InputStream in=getContentResolver().openInputStream(uri);ByteArrayOutputStream out=new ByteArrayOutputStream()){
             byte[] buf=new byte[8192];int n;
@@ -121,8 +170,7 @@ public final class MainActivity extends Activity {
         };
         directory.update(list->{
             servers=list;
-            if(!paidMode)selectedIndex=0;
-            else if(selectedIndex>=servers.size())selectedIndex=0;
+            if(selectedIndex>=servers.size())selectedIndex=0;
             persist();screen.invalidate();
             openVpnResult[0]="OpenVPN: "+list.size()+" free servers updated"+
                 (paidMode?" (paid profile preserved)":"; best advertised ping selected");
@@ -162,7 +210,8 @@ public final class MainActivity extends Activity {
             }).show();
     }
     void persist(){getPreferences(MODE_PRIVATE).edit().putBoolean("paid_mode",paidMode)
-        .putBoolean("prefer_native",preferNative).putInt("selected",selectedIndex).apply();}
+        .putBoolean("prefer_native",preferNative).putBoolean("smart_native",smartNative)
+        .putInt("selected",selectedIndex).apply();}
     void selectServer(){
         if(servers.isEmpty()){info("No cached free OpenVPN relay. Try embedded V2Ray or refresh the public mirror.");return;}
         String[] items=new String[Math.min(servers.size(),75)];
@@ -179,7 +228,7 @@ public final class MainActivity extends Activity {
         long now=android.os.SystemClock.elapsedRealtime();
         if(nativeCacheAt!=0&&now-nativeCacheAt<30000)return hasNativeCache;
         hasNativeCache=false;
-        for(FeedParser.Entry e:hub.entries("V2RAY"))if(SingBoxConfig.supported(e.value)){
+        for(FeedParser.Entry e:hubPanel.entries("V2RAY"))if(SingBoxConfig.supported(e.value)){
             hasNativeCache=true;break;
         }
         nativeCacheAt=now;
@@ -217,8 +266,12 @@ public final class MainActivity extends Activity {
             try{config=profiles.getOpenVpnConfig();}
             catch(Exception e){info("Could not decrypt paid profile.");return;}
             if(config==null){info("Import your paid .ovpn file first.");return;}
+        }else if(preferNative&&!smartNative&&!chosenNative().isEmpty()){
+            try{connectNative(SingBoxConfig.build(chosenNative()));}
+            catch(Exception e){info("Saved server could not be used: "+e.getMessage());}
+            return;
         }else if(preferNative&&hasNativeCandidates()){
-            ArrayList<FeedParser.Entry> choices=new ArrayList<>(hub.entries("V2RAY"));
+            ArrayList<FeedParser.Entry> choices=new ArrayList<>(hubPanel.entries("V2RAY"));
             choices.sort((a,b)->{
                 long ra=hubPanel.probe.rank(a.value),rb=hubPanel.probe.rank(b.value);
                 if(ra!=rb)return Long.compare(ra,rb);
@@ -266,7 +319,7 @@ public final class MainActivity extends Activity {
             if(which==7)info("Connection requires the separate free 'OpenVPN for Android' app (de.blinkt.openvpn).\n"+
               "Free VPN Gate volunteer relays can monitor traffic metadata and disconnect unexpectedly.\n"+
               "Updates refer to the server directory, not APK updates.\n"+
-              "VLESS, Hysteria 2 and AmneziaWG engines are not bundled yet.");
+              "Embedded sing-box supports selected VLESS, VMess, Trojan, Shadowsocks and Hysteria2 formats. AmneziaWG and encrypted .npv are not supported.");
         }).show();
     }
     private class Screen extends View {
