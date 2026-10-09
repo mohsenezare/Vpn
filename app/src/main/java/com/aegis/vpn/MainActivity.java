@@ -224,10 +224,14 @@ public final class MainActivity extends Activity {
                 if(ra!=rb)return Long.compare(ra,rb);
                 return Boolean.compare(!a.value.startsWith("vless://"),!b.value.startsWith("vless://"));
             });
+            ArrayList<String> candidates=new ArrayList<>();
             for(FeedParser.Entry e:choices){
-                try{connectNative(SingBoxConfig.build(e.value));return;}catch(Exception ignored){}
+                if(candidates.size()>=12)break;
+                if(SingBoxConfig.supported(e.value))candidates.add(e.value);
             }
-            info("No supported native proxy configuration was found.");return;
+            try{connectNative(SingBoxConfig.buildAuto(candidates));}
+            catch(Exception ex){info("No supported native proxy config: "+ex.getMessage());}
+            return;
         }else if(!servers.isEmpty()){
             config=servers.get(Math.min(selectedIndex,servers.size()-1)).config;
         }else if(hasNativeCandidates()){
