@@ -102,7 +102,7 @@ final class SingBoxConfig {
                 .put("enabled",true).put("fingerprint",fp));
             if(security.equals("reality")){
                 String key=param(uri,"pbk","publicKey");
-                if(key.isEmpty()||!key.matches("[a-zA-Z0-9_-]{40,48}"))
+                if(key.isEmpty()||!key.matches("[a-zA-Z0-9_-]{42,44}={0,2}"))
                     throw new IllegalArgumentException("Reality public key invalid");
                 String padded=key.replace('-','+').replace('_','/');
                 int remainder=padded.length()%4;
