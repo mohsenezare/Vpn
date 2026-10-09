@@ -8,6 +8,11 @@ import java.util.*;
 import java.util.concurrent.*;
 final class SourceHub {
  static final String[] CHANNELS={"net_azad","proxyplus","irovpn","mtproto021","netmeli_ir","npv_iran","proxy_netmeli","onevpn","iproxy2","myconfig","miticonfig","proxyrp","mitivpn"};
+ static final String[] COUNTRIES={"US","CA","FR","CH","DE","GB","NL","JP","SG","AU"};
+ static String country(String source){
+  for(String code:COUNTRIES)if(source.contains("/sub-"+code+".txt"))return code;
+  return "";
+ }
  final Context context;
  final Handler main=new Handler(Looper.getMainLooper());
  volatile boolean busy;
@@ -22,6 +27,8 @@ final class SourceHub {
   s.add("https://raw.githubusercontent.com/morpheusadam/v2ray-config/main/subs/bundles/mini.txt");
   s.add("https://raw.githubusercontent.com/morpheusadam/v2ray-config/main/subs/bundles/lite.txt");
   s.add("https://raw.githubusercontent.com/morpheusadam/v2ray-config/main/subs/bundles/hysteria2.txt");
+  for(String code:COUNTRIES)s.add("https://raw.githubusercontent.com/Mokafela/Config-Finder/master/split/sub-"+code+".txt");
+  s.add("https://raw.githubusercontent.com/SoliSpirit/mtproto/master/all_proxies.txt");
   return s;
  }
  static String get(String address)throws Exception{
@@ -67,8 +74,8 @@ final class SourceHub {
     try{
      String body=get(s);
      if(s.startsWith("https://t.me/s/")&&!java.util.regex.Pattern.compile("data-post=\""+java.util.regex.Pattern.quote(s.substring(s.lastIndexOf('/')+1))+"/[0-9]+\"",java.util.regex.Pattern.CASE_INSENSITIVE).matcher(body).find())throw new IOException("Preview does not match requested channel");
-     entries=FeedParser.parse(body,s);
-     if(entries.isEmpty())throw new IOException("No supported configs in public preview");
+     entries=s.endsWith("/npv_iran")?FeedParser.latestNapster(body,"npv_iran",3):FeedParser.parse(body,s);
+     if(entries.isEmpty())throw new IOException("No matching public configs or channel posts");
     }catch(Exception directError){
      if(!s.startsWith("https://t.me/s/"))throw directError;
      JSONObject mirror=new JSONObject(get("https://raw.githubusercontent.com/mohsenezare/Vpn/main/feeds/"+s.substring(s.lastIndexOf('/')+1)+".json"));
@@ -80,7 +87,16 @@ final class SourceHub {
       if(kind.equals("NAPSTERNETV")&&v.matches("https://t\\.me/[A-Za-z0-9_]+/[0-9]+"))entries.add(new FeedParser.Entry(kind,v,s));
       else entries.addAll(FeedParser.parse(v,s));
      }
+     if(s.endsWith("/npv_iran")){
+      entries.removeIf(e->!e.kind.equals("NAPSTERNETV"));
+      entries.sort((a,b)->Long.compare(FeedParser.postId(b.value),FeedParser.postId(a.value)));
+      entries=new ArrayList<>(entries.subList(0,Math.min(3,entries.size())));
+     }
      if(entries.isEmpty())throw new IOException("No valid configs in public mirror");
+    }
+    if(s.endsWith("/npv_iran")){
+     entries.sort((a,b)->Long.compare(FeedParser.postId(b.value),FeedParser.postId(a.value)));
+     entries=new ArrayList<>(entries.subList(0,Math.min(3,entries.size())));
     }
     JSONArray a=new JSONArray();
     for(FeedParser.Entry e:entries){JSONObject o=new JSONObject();o.put("k",e.kind);o.put("v",e.value);a.put(o);}
@@ -96,7 +112,8 @@ final class SourceHub {
    // Keep the last successful cache for 72 h, including during feed failures.
    if(System.currentTimeMillis()-context.getSharedPreferences("hub",0).getLong(s+"time",0)>259200000L)continue;
    try{JSONArray a=new JSONArray(context.getSharedPreferences("hub",0).getString(s,"[]"));
-    for(int i=0;i<a.length();i++){JSONObject o=a.getJSONObject(i);if(o.getString("k").equals(kind))result.put(o.getString("v"),new FeedParser.Entry(kind,o.getString("v"),s));}
+    for(int i=0;i<a.length();i++){JSONObject o=a.getJSONObject(i);if(o.getString("k").equals(kind)&&(!kind.equals("NAPSTERNETV")||s.endsWith("/npv_iran")))
+     result.put(o.getString("v"),new FeedParser.Entry(kind,o.getString("v"),s));}
    }catch(Exception ignored){}
   }return new ArrayList<>(result.values());
  }
