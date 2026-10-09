@@ -24,12 +24,7 @@ final class GlassDialog {
     w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
     WindowManager.LayoutParams params=w.getAttributes();
     params.dimAmount=.30f;w.setAttributes(params);
-    if(Build.VERSION.SDK_INT>=31){
-      w.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND);
-      params=w.getAttributes();
-      params.setBlurBehindRadius((int)(19*scale));w.setAttributes(params);
-      w.setBackgroundBlurRadius((int)(24*scale));
-    }
+    // Avoid expensive live backdrop blurs; soft translucent glass + dim is GPU-friendly.
     w.setLayout((int)(getContext().getResources().getDisplayMetrics().widthPixels*.90f),
         WindowManager.LayoutParams.WRAP_CONTENT);
     View root=w.getDecorView();
@@ -39,8 +34,8 @@ final class GlassDialog {
     root.setTranslationY(scale*25);
     root.animate().cancel();
     root.animate().alpha(1).scaleX(1).scaleY(1).translationY(0)
-      .setDuration(430)
-      .setInterpolator(new OvershootInterpolator(.52f)).start();
+      .setDuration(290)
+      .setInterpolator(new PathInterpolator(.18f,.8f,.22f,1f)).start();
     d.setOnDismissListener(dialog->{root.animate().cancel();});
    }
    return d;
