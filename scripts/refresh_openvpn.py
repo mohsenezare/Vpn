@@ -34,12 +34,29 @@ def directory_nodes(raw):
                     re.search(r"(?m)^client\s*$",config) and re.search(r"(?m)^remote\s+\S+",config)):continue
             if re.search(r"(?im)^\s*(script-security|up|down|plugin|client-connect|client-disconnect)\s+",config):continue
             ping=int(row[3]) if row[3].isdigit() else 0
-            nodes.append({"host":host,"country":row[5].strip()[:45],"ping":ping,"ovpn":config})
+            speed=int(row[4]) if row[4].isdigit() else 0
+            uptime=int(row[8]) if row[8].isdigit() else 0
+            nodes.append({"host":host,"country":row[5].strip()[:45],
+                "ping":ping,"speed":speed,"uptime":uptime,"ovpn":config})
             seen.add(host)
         except (ValueError,UnicodeError,IndexError):continue
-        if len(nodes)>=80:break
+        if len(nodes)>=600:break
     if not nodes:raise ValueError("no valid OpenVPN relays in origin CSV")
-    return sorted(nodes,key=lambda n:n["ping"] if n["ping"]>0 else 999999)
+    import math,re
+    def quality(n):
+        tcp=bool(re.search(r"(?im)^\\s*proto\\s+tcp",n["ovpn"]))
+        return math.log1p(n["speed"]/1_000_000)*2.4+math.log1p(n["uptime"]/3600000)*.5+(2 if tcp else 0)-min(n["ping"] or 300,600)*.004
+    nodes.sort(key=quality,reverse=True)
+    result=[];seen_country={}
+    for n in nodes:
+        c=n["country"]
+        if seen_country.get(c,0)>=16:continue
+        result.append(n);seen_country[c]=seen_country.get(c,0)+1
+        if len(result)==80:break
+    for n in nodes:
+        if len(result)==80:break
+        if n not in result:result.append(n)
+    return result
 
 def mirror_csv():
     meta=json.loads(get(INDEX,65536))
