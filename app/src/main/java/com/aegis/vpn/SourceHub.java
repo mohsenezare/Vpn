@@ -11,6 +11,7 @@ final class SourceHub {
  final Context context;
  final Handler main=new Handler(Looper.getMainLooper());
  volatile boolean busy;
+ private final ArrayList<Runnable> completionListeners=new ArrayList<>();
  SourceHub(Context c){context=c.getApplicationContext();}
  List<String> sources(){
   ArrayList<String> s=new ArrayList<>();
@@ -33,8 +34,23 @@ final class SourceHub {
  }
  boolean stale(){return System.currentTimeMillis()-context.getSharedPreferences("hub",0).getLong("attempt",0)>3600000L;}
  synchronized void refresh(Runnable done){
-  if(busy)return;busy=true;
-  new Thread(()->{try{fetch();}finally{busy=false;main.post(done);}},"source-hub").start();
+  if(done!=null)completionListeners.add(done);
+  if(busy)return;
+  busy=true;
+  new Thread(()->{
+   try{fetch();}
+   finally{
+    List<Runnable> callbacks;
+    synchronized(this){
+     busy=false;
+     callbacks=new ArrayList<>(completionListeners);
+     completionListeners.clear();
+    }
+    main.post(()->{for(Runnable callback:callbacks){
+     try{callback.run();}catch(Exception ignored){}
+    }});
+   }
+  },"source-hub").start();
  }
  void fetch(){
   ExecutorService pool=Executors.newFixedThreadPool(4);
