@@ -129,6 +129,26 @@ final class HubPanel {
   long v=probe.latency.getOrDefault(link,Long.MIN_VALUE);
   return v==Long.MIN_VALUE?MUTED:v<0?0xffd85e64:v<120?0xff05b981:v<350?0xffd39b2c:0xffe56b40;
  }
+ void coloredConfigRow(LinearLayout body,FeedParser.Entry e,boolean selected,Runnable click){
+  LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.bottomMargin=px(10);
+  LinearLayout line=new LinearLayout(activity);line.setGravity(Gravity.CENTER_VERTICAL);pad(line,14,12,12,12);
+  line.setBackground(bg(selected?0xffedfff7:0xf6ffffff,22));body.addView(line,lp);
+  LinearLayout marker=col();marker.setGravity(Gravity.CENTER);marker.setBackground(bg(0xfff3f6fb,15));
+  LinearLayout.LayoutParams markerLp=new LinearLayout.LayoutParams(px(40),px(42));markerLp.rightMargin=px(11);line.addView(marker,markerLp);
+  TextView symbol=text("◆",22,tint(e.value),true);symbol.setGravity(Gravity.CENTER);marker.addView(symbol);
+  LinearLayout labels=col();line.addView(labels,new LinearLayout.LayoutParams(0,-2,1));
+  TextView name=text((selected?"✓ ":"")+type(e.value)+" · "+host(e.value),14,INK,true);
+  name.setMaxLines(1);name.setEllipsize(android.text.TextUtils.TruncateAt.END);labels.addView(name);
+  TextView src=text(e.source.replace("https://t.me/s/","@"),11,MUTED,false);
+  src.setMaxLines(1);src.setEllipsize(android.text.TextUtils.TruncateAt.END);labels.addView(src);
+  LinearLayout badge=col();badge.setGravity(Gravity.CENTER);
+  String delay=delay(e.value);int hue=latencyColor(e.value);
+  badge.setBackground(bg(0x11000000|(hue&0x00ffffff),15));
+  LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(px(94),px(38));bp.leftMargin=px(8);line.addView(badge,bp);
+  TextView b=text(delay.length()>14?delay.substring(0,14):delay,10,hue,true);
+  b.setGravity(Gravity.CENTER);pad(b,4,0,4,0);badge.addView(b);
+  line.setOnClickListener(v->click.run());
+ }
  void list(String kind){
   List<FeedParser.Entry> a=entries(kind);
   a.sort(Comparator.comparingLong(e->probe.rank(e.value)));
@@ -149,9 +169,7 @@ final class HubPanel {
    String selected=vault.selected();
    for(int i=0;i<limit;i++){
     FeedParser.Entry e=a.get(i);
-    String title=(selected.equals(e.value)?"✓  ":"")+type(e.value)+"  ·  "+host(e.value);
-    String secondary=delay(e.value)+"  ·  "+e.source.replace("https://t.me/s/","@");
-    row(body,title,secondary,tint(e.value),()->{d.dismiss();entry(e);});
+    coloredConfigRow(body,e,selected.equals(e.value),()->{d.dismiss();entry(e);});
    }
    if(a.size()>limit)row(body,(a.size()-limit)+" more entries","Showing first "+limit+" to keep scrolling fast",MUTED,null);
   });
