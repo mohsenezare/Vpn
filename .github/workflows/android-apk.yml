@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
     paths: ['app/**', 'tests/**', '*.gradle', 'gradle.properties', '.github/workflows/android-apk.yml']
+  pull_request:
+    paths: ['app/**', 'tests/**', '*.gradle', 'gradle.properties', '.github/workflows/android-apk.yml']
   workflow_dispatch:
 permissions:
   contents: write
@@ -56,9 +58,10 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
       - name: Publish downloadable debug APK
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="build-${GITHUB_RUN_NUMBER}"
-          cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.10.0-arm64-debug.apk
-          gh release create "$tag" AegisVPN-v0.10.0-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.10.0 · build ${GITHUB_RUN_NUMBER}" --notes "Experimental arm64 APK. OpenVPN source ranking by published throughput/uptime and country diversity; measured TCP latency in phone's network, UDP unknown. One-tap OpenVPN/native switching, cached glass slider and cards, live Stats uptime and approximate UID traffic. Fourth tab opens official Cloudflare WARP Android app or own OpenVPN import; external provider availability is never guaranteed. OpenVPN requires companion client." || echo "Release publishing unavailable (GitHub App permissions); APK artifact was successfully uploaded."
+          cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.11.0-arm64-debug.apk
+          gh release create "$tag" AegisVPN-v0.11.0-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.11.0 · build ${GITHUB_RUN_NUMBER}" --notes "Experimental arm64 APK. OpenVPN source ranking by published throughput/uptime and country diversity; measured TCP latency in phone's network, UDP unknown. One-tap OpenVPN/native switching, cached glass slider and cards, live Stats uptime and approximate UID traffic. Fourth tab opens official Cloudflare WARP Android app or own OpenVPN import; external provider availability is never guaranteed. OpenVPN requires companion client." || echo "Release publishing unavailable (GitHub App permissions); APK artifact was successfully uploaded."
