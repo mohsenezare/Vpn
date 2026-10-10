@@ -328,7 +328,7 @@ public final class MainActivity extends Activity {
                 " | Telegram proxies: "+hub.entries("PROXY").size();
             List<FeedParser.Entry> measured=hub.entries("V2RAY");
             if(measured.isEmpty()||hubPanel.probe.busy){finished.run();return;}
-            hubPanel.probe.test(measured,finished);
+            hubPanel.probe.test(measured,()->{screen.listCacheAt=0;screen.invalidate();finished.run();});
         });
     }
     void showPaidCredentials(String ovpn){
