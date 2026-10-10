@@ -16,7 +16,7 @@ public final class MainActivity extends Activity {
  private int tab;
  private String selected;
  private String pendingNativeConfig;
- private boolean pendingScan,connectAfterScan;
+ private boolean pendingScan;
  private static final int PREPARE_NATIVE=8292;
  boolean updatingAll;
  private final Handler handler=new Handler(Looper.getMainLooper());
@@ -29,7 +29,6 @@ public final class MainActivity extends Activity {
  private final BroadcastReceiver nativeEvents=new BroadcastReceiver(){public void onReceive(Context context,Intent intent){
   if(intent.getBooleanExtra("scan",false)&&!ProxyScanner.busy){
    reload();updatingAll=false;
-   if(connectAfterScan){connectAfterScan=false;if(ProxyScanner.best!=null)startVpn();else info(ProxyScanner.progress());}
   }
   screen.invalidate();AegisShortcuts.publish(MainActivity.this,isTunnelOn(),isConnecting());
   if(intent.getIntExtra("state",0)==SingVpnService.FAILED)info("VPN error: "+intent.getStringExtra("message"));
@@ -63,7 +62,7 @@ public final class MainActivity extends Activity {
   super.onActivityResult(request,result,data);
   if(request==PREPARE_NATIVE){
    if(result==RESULT_OK){if(pendingScan){pendingScan=false;scan();}else if(pendingNativeConfig!=null){String config=pendingNativeConfig;pendingNativeConfig=null;startNativeService(config);}}
-   else{pendingScan=false;pendingNativeConfig=null;updatingAll=false;connectAfterScan=false;info("VPN permission was not granted.");}
+   else{pendingScan=false;pendingNativeConfig=null;updatingAll=false;info("VPN permission was not granted.");}
   }
  }
  void info(String msg){if(!isFinishing()&&!isDestroyed())new GlassDialog.Builder(this).setMessage(msg==null?"Unknown error":msg).setPositiveButton("OK",null).show();}
@@ -95,9 +94,9 @@ public final class MainActivity extends Activity {
  boolean isConnecting(){return SingVpnService.state==SingVpnService.STARTING;}
  void startVpn(){
   if(isTunnelOn()||isConnecting())return;
-  if(ProxyScanner.busy||updatingAll){connectAfterScan=true;info("Testing configurations; the best successful result will connect when complete.");return;}
+  if(ProxyScanner.busy||updatingAll){info("Testing configurations. The fastest successful result will be selected when complete.");return;}
   reload();
-  if(selected==null){connectAfterScan=true;refreshAll();return;}
+  if(selected==null){refreshAll();return;}
   try{connectNative(SingBoxConfig.build(selected));}catch(Exception e){info(e.getMessage());}
  }
  void showSettings(){hubPanel.open();}

@@ -52,7 +52,7 @@ public final class SingVpnService extends VpnService {
                         sendBroadcast(update);
                     });
                 }catch(Exception e){ProxyScanner.busy=false;ProxyScanner.summary="Unable to start tests";sendBroadcast(new Intent(ACTION_STATUS).setPackage(getPackageName()).putExtra("scan",true));}
-                if(core==null){stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();}
+                if(core==null&&state!=STARTING){stopForeground(STOP_FOREGROUND_REMOVE);stopSelf(startId);}
                 else updateNotification("VPN tunnel active");
             });
             return START_NOT_STICKY;
@@ -74,7 +74,7 @@ public final class SingVpnService extends VpnService {
                 core.start();
                 if(stopping){cleanup();return;}
                 if(tun==null)throw new IllegalStateException("Core started but VPN TUN was not created");
-                state=TUNNEL_ACTIVE;broadcast();updateNotification("VPN tunnel started · testing server needed");
+                state=TUNNEL_ACTIVE;broadcast();updateNotification("V2Ray tunnel active");
             }catch(Throwable e){
                 Log.e("AegisSingBox","Core start failed",e);
                 lastError=e.getMessage()==null?e.getClass().getSimpleName():e.getMessage();
