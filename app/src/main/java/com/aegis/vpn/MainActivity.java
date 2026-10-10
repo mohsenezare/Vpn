@@ -33,6 +33,7 @@ public final class MainActivity extends Activity {
     private boolean paidMode=false;
     private boolean preferNative=true;
     private int openVpnRetries=0;
+    private boolean openProbeQueued=false;
     private String pendingNativeConfig;
     private static final int PREPARE_NATIVE=8292;
     private final BroadcastReceiver nativeEvents=new BroadcastReceiver(){
@@ -278,9 +279,13 @@ public final class MainActivity extends Activity {
         }
         persist();
         if(screen!=null)screen.invalidate();
+        if(openProbeQueued){
+            openProbeQueued=false;
+            measureOpenVpn();
+        }
     }
     void measureOpenVpn(){
-        if(openProbe.busy)return;
+        if(openProbe.busy){openProbeQueued=true;return;}
         openProbe.run(new ArrayList<>(servers),this::reorderFreeServers);
     }
     void refresh(boolean notify){
@@ -293,8 +298,8 @@ public final class MainActivity extends Activity {
             if(notify) Toast.makeText(this,list.size()+" free profiles; testing real TCP reachability",Toast.LENGTH_SHORT).show();
         }, err -> {if(notify)info("Directory refresh failed. Last saved servers retained.\n"+err);});
     }
-    /** Update OpenVPN and all public config sources, then pick the lowest directory-reported
-     * ping for free mode. This is not proof of a successful VPN handshake. */
+    /** Update public sources and rerank free TCP endpoints using measurements on device.
+     * No directory-provided ping is mistaken for successful VPN authentication. */
     void refreshAll(){
         if(updatingAll){info("A source update is already running.");return;}
         updatingAll=true;screen.invalidate();
@@ -767,8 +772,9 @@ public final class MainActivity extends Activity {
                 c.drawArc(x-4,sy-4,x+sw+4,sy+sh+4,phase*360,115,false,p);
                 p.setStyle(Paint.Style.FILL);
             }
-            center(c,on?"Tap center to disconnect immediately":
-                connecting?"Tap center to cancel connection":"Slide or tap the glowing button",
+            center(c,on?(vpn.state==VpnController.State.ON||SingVpnService.verifiedRoute?
+                "✓  Your connection is protected":"Tunnel active · verifying route"):
+                connecting?"Establishing a secure connection":"Slide to connect securely",
                 W/2,sy+sh+32,11.5f,on?0xff288e6e:MUTED,false);
             // Reference image has no extra quick-action cards between the switch and country.
             // Smart Update and manual selection stay available in Settings and Locations.
