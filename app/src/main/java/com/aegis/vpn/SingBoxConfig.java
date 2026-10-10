@@ -90,7 +90,7 @@ final class SingBoxConfig {
             String sni=param(uri,"sni","serverName");
             if(!sni.isEmpty())tls.put("server_name",sni);
             String fp=param(uri,"fp","fingerprint");
-            if(!fp.isEmpty())tls.put("utls",new JSONObject().put("enabled",true).put("fingerprint",fp));
+            if(security.equals("reality")||!fp.isEmpty())tls.put("utls",new JSONObject().put("enabled",true).put("fingerprint",fp.isEmpty()?"chrome":fp));
             if(security.equals("reality")){
                 String key=param(uri,"pbk","publicKey");
                 if(key.isEmpty())throw new IllegalArgumentException("Reality public key missing");
