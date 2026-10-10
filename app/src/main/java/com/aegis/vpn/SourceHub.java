@@ -15,15 +15,19 @@ final class SourceHub {
  SourceHub(Context c){context=c.getApplicationContext();}
  List<String> sources(){
   ArrayList<String> s=new ArrayList<>();
-  for(String c:CHANNELS)s.add("https://t.me/s/"+c);
+  // Source-published multi-round HTTP-tested proxies; always re-test on device.
+  s.add("https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/top100.txt");
+  s.add("https://raw.githubusercontent.com/Au1rxx/free-vpn-subscriptions/main/output/v2ray-base64.txt");
+  // Preserve the v0.5 original fallback, without treating it as verified.
   s.add("https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/Eternity.txt");
+  s.add("https://t.me/s/mitivpn");
   return s;
  }
  static String get(String address)throws Exception{
   URL u=new URL(address);if(!u.getProtocol().equals("https"))throw new IOException("HTTPS required");
   HttpURLConnection c=(HttpURLConnection)u.openConnection();
   c.setConnectTimeout(7000);c.setReadTimeout(9000);c.setInstanceFollowRedirects(false);
-  c.setRequestProperty("User-Agent","Mozilla/5.0 AegisVPN/0.4");
+  c.setRequestProperty("User-Agent","Mozilla/5.0 AegisVPN/0.5");
   try{
    int status=c.getResponseCode();if(status!=200)throw new IOException("HTTP "+status);
    try(InputStream in=c.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){
