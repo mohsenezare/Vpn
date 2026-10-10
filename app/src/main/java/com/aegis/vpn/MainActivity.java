@@ -670,13 +670,30 @@ public final class MainActivity extends Activity {
             navbar(c);raw.restore();
         }
         void header(Canvas c){
-            card(c,19,36,46,46,23,0x9bffffff);
+            // Keep the approved reference header: library on left, VPN in center, settings on right.
+            card(c,19,36,46,46,23,0xb6ffffff);
             center(c,"⠿",42,65,22,0xff596670,true);
             center(c,"VPN",W/2,66,19,INK,true);
-            // The approved header keeps just the library affordance; settings live there.
+            card(c,W-65,36,46,46,23,0xb6ffffff);
+            center(c,"⚙",W-42,66,23,0xff596670,true);
         }
         float sliderY(){return H*.409f;}
         float serverY(){return Math.min(Math.max(sliderY()+175,H*.655f),H-250);}
+        String countryFlag(String country){
+            String name=country.toLowerCase(java.util.Locale.ROOT);
+            if(name.contains("united states")||name.equals("usa"))return "🇺🇸";
+            if(name.contains("japan"))return "🇯🇵";
+            if(name.contains("canada"))return "🇨🇦";
+            if(name.contains("germany"))return "🇩🇪";
+            if(name.contains("france"))return "🇫🇷";
+            if(name.contains("singapore"))return "🇸🇬";
+            if(name.contains("united kingdom")||name.equals("uk"))return "🇬🇧";
+            if(name.contains("netherlands"))return "🇳🇱";
+            if(name.contains("australia"))return "🇦🇺";
+            if(name.contains("korea"))return "🇰🇷";
+            if(name.contains("india"))return "🇮🇳";
+            return "🌐";
+        }
         void home(Canvas c){
             float titleY=Math.max(151,H*.198f);
             ink(c,"Private.",27,titleY,36,INK,true);
@@ -715,7 +732,7 @@ public final class MainActivity extends Activity {
             p.setStyle(Paint.Style.STROKE);p.setColor(0xc9ffffff);p.setStrokeWidth(1);c.drawCircle(knobX,cy,38,p);p.setStyle(Paint.Style.FILL);
             if(on)ink(c,"✓",knobX-20,cy+16,51,GREEN,true);
             else drawShield(c,knobX-30,cy-30,60);
-            if(on)ink(c,SingVpnService.verifiedRoute?"Connected":"Tunnel active",x+24,cy+6,20,0xffffffff,true);
+            if(on)ink(c,(vpn.state==VpnController.State.ON||SingVpnService.verifiedRoute)?"Connected":"Tunnel active",x+24,cy+6,20,0xffffffff,true);
             else ink(c,connecting?"Connecting…":"Slide to connect",x+107,cy+6,18,0xffffffff,true);
             if(connecting){
                 p.setStrokeWidth(3);p.setStyle(Paint.Style.STROKE);p.setColor(0xdfffffff);
@@ -725,17 +742,17 @@ public final class MainActivity extends Activity {
             center(c,on?"Tap center to disconnect immediately":
                 connecting?"Tap center to cancel connection":"Slide or tap the glowing button",
                 W/2,sy+sh+32,11.5f,on?0xff288e6e:MUTED,false);
-            // Clear separation between Smart refresh and manual selection.
-            float quickY=sy+sh+39;
-            card(c,24,quickY,(W-56)/2,36,18,0x91ffffff);
-            card(c,W/2+4,quickY,(W-56)/2,36,18,0x91ffffff);
-            center(c,"↻ Smart update",24+(W-56)/4f,quickY+23,12.5f,ORANGE,true);
-            center(c,"☷ Choose server",W*.75f+1,quickY+23,12.5f,INK,true);
+            // Reference image has no extra quick-action cards between the switch and country.
+            // Smart Update and manual selection stay available in Settings and Locations.
             float y=serverY();
             card(c,21,y,W-42,78,25,0xa4ffffff);
             circle(c,61,y+44,26,0xfff2f8fa);
-            if(!paidMode&&preferNative)ink(c,"◈",46,y+55,33,0xff8b67f1,true);
-            else ink(c,"◉",46,y+54,29,0xfff59440,true);
+            if(!paidMode&&preferNative)ink(c,"🌐",41,y+54,31,0xff8b67f1,true);
+            else if(paidMode)ink(c,"🔒",42,y+54,28,0xfff59440,true);
+            else {
+                FreeDirectory.Node countryNode=servers.isEmpty()?null:servers.get(Math.min(selectedIndex,servers.size()-1));
+                ink(c,countryNode==null?"🌐":countryFlag(countryNode.country),41,y+54,31,INK,true);
+            }
             String title;
             String subtitle;
             if(paidMode){title="Private OpenVPN account";subtitle="Purchased .ovpn profile";}
@@ -745,7 +762,7 @@ public final class MainActivity extends Activity {
             }else{
                 FreeDirectory.Node node=servers.isEmpty()?null:servers.get(Math.min(selectedIndex,servers.size()-1));
                 title=node==null?"OpenVPN · no nodes yet":node.country;
-                subtitle=node==null?"Use Smart update to refresh":node.host+" · "+(node.ping>0?node.ping+"ms reported":"No ping reported");
+                subtitle=node==null?"Use Settings to refresh":node.host+" · "+openProbe.label(node);
             }
             ink(c,cut(title,(int)(W-145),16),101,y+35,16,INK,true);
             ink(c,cut(subtitle,(int)(W-147),12),101,y+58,12,MUTED,false);
@@ -881,15 +898,14 @@ public final class MainActivity extends Activity {
         }
         void navbar(Canvas c){
             float y=H-75;
-            card(c,0,y,W,86,27,0xb9ffffff);
-            String[] labels={"Home","Locations","Stats","Backup"};
-            String[] symbols={"⌂","◎","▥","◇"};
-            for(int i=0;i<4;i++){
-                float x=W*(i+.5f)/4;
+            card(c,0,y,W,86,27,0xc9ffffff);
+            String[] labels={"Home","Locations","Stats"};
+            String[] symbols={"⌂","◎","▥"};
+            for(int i=0;i<3;i++){
+                float x=W*(i+.5f)/3;
                 int color=tab==i?ORANGE:MUTED;
                 center(c,symbols[i],x,y+34,27,color,true);
                 center(c,labels[i],x,y+60,12,color,tab==i);
-                if(i==tab){p.setColor(ORANGE);c.drawRoundRect(x-12,y+5,x+12,y+8,2,2,p);}
             }
         }
         @Override public boolean onTouchEvent(MotionEvent e){
@@ -921,8 +937,12 @@ public final class MainActivity extends Activity {
                     else if(x-downX>Math.min(58,W*.19f)||Math.abs(x-downX)<14)startVpn();
                     return true;
                 }
-                if(y>H-82){setTab(Math.min(3,(int)(x/W*4)));return true;}
-                if(y<91){if(x<85)hubPanel.open();return true;}
+                if(y>H-82){setTab(Math.min(2,(int)(x/W*3)));return true;}
+                if(y<91){
+                    if(x<85)hubPanel.open();
+                    else if(x>W-85)showSettings();
+                    return true;
+                }
                 if(tab==3){
                     if(y>=193&&y<309){quickBackup();return true;}
                     if(y>=328&&y<440){
@@ -932,11 +952,7 @@ public final class MainActivity extends Activity {
                     }
                 }
                 if(tab==0){
-                    float quickY=sliderY()+92+39;
-                    if(y>quickY&&y<quickY+42){
-                        if(x<W/2)refreshAll();else hubPanel.open();return true;
-                    }
-                    if(y>serverY()&&y<serverY()+81){hubPanel.open();return true;}
+                    if(y>serverY()&&y<serverY()+81){openVpnLocations();return true;}
                 }else if(tab==1){
                     if(y>178&&y<215){
                         int next=Math.max(0,Math.min(2,(int)((x-21)/((W-46)/3))));
