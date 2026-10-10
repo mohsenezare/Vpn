@@ -14,18 +14,20 @@ import java.util.*;
 
 /** Implements the upstream sing-box libbox v1.12.22 Android platform contract. */
 final class SingBoxPlatform implements PlatformInterface {
+    private final Context context;
     private final SingVpnService vpn;
     private final ConnectivityManager connectivity;
     private ConnectivityManager.NetworkCallback callback;
-    SingBoxPlatform(SingVpnService service){
-        vpn=service;
+    SingBoxPlatform(Context service){
+        context=service;
+        vpn=service instanceof SingVpnService?(SingVpnService)service:null;
         connectivity=(ConnectivityManager)service.getSystemService(Context.CONNECTIVITY_SERVICE);
     }
-    @Override public boolean usePlatformAutoDetectInterfaceControl(){return true;}
+    @Override public boolean usePlatformAutoDetectInterfaceControl(){return vpn!=null;}
     @Override public void autoDetectInterfaceControl(int fd){
-        if(!vpn.protect(fd)) Log.w("AegisSingBox","Failed to protect outbound socket "+fd);
+        if(vpn!=null&&!vpn.protect(fd)) Log.w("AegisSingBox","Failed to protect outbound socket "+fd);
     }
-    @Override public int openTun(TunOptions options) throws Exception{return vpn.openTun(options);}
+    @Override public int openTun(TunOptions options) throws Exception{if(vpn==null)throw new IllegalStateException("Probe cannot open a VPN tunnel");return vpn.openTun(options);}
     @Override public boolean useProcFS(){return Build.VERSION.SDK_INT<29;}
     @Override public int findConnectionOwner(int protocol,String src,int sPort,String dst,int dPort){
         if(Build.VERSION.SDK_INT>=29)try{
@@ -34,11 +36,11 @@ final class SingBoxPlatform implements PlatformInterface {
         return -1;
     }
     @Override public String packageNameByUid(int uid){
-        String[] packages=vpn.getPackageManager().getPackagesForUid(uid);
+        String[] packages=context.getPackageManager().getPackagesForUid(uid);
         return packages==null||packages.length==0?"":packages[0];
     }
     @Override public int uidByPackageName(String name){
-        try{return vpn.getPackageManager().getApplicationInfo(name,0).uid;}
+        try{return context.getPackageManager().getApplicationInfo(name,0).uid;}
         catch(PackageManager.NameNotFoundException e){return -1;}
     }
     @Override public void startDefaultInterfaceMonitor(InterfaceUpdateListener listener){

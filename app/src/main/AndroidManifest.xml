@@ -15,6 +15,7 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <service android:name=".ProbeWorkerService" android:exported="false" android:process=":probe"/>
         <service android:name=".SingVpnService"
             android:exported="false"
             android:permission="android.permission.BIND_VPN_SERVICE"

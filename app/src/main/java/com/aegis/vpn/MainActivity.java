@@ -49,7 +49,7 @@ public final class MainActivity extends Activity {
   handler.post(()->{AegisShortcuts.maybeAskNotificationPermission(this);handleQuickAction(getIntent());});
  }
  void reload(){
-  servers=hub.entries("V2RAY");servers.sort(Comparator.comparingLong(e->ProxyScanner.rank(e.value)));
+  servers=hub.entries("V2RAY");ProxyScanner.sort(servers);
   try{selected=profiles.getNative();}catch(Exception e){selected=null;}
   boolean found=false;for(FeedParser.Entry e:servers)if(e.value.equals(selected)){found=true;break;}
   if(!found){selected=null;profiles.clearNative();}

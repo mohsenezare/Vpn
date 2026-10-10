@@ -13,7 +13,7 @@ final class HubPanel {
  }
  static String name(FeedParser.Entry e){String name=Uri.parse(e.value).getFragment();String protocol=e.value.substring(0,e.value.indexOf(':')).toUpperCase(Locale.ROOT);return protocol+(name==null?"":" · "+name.substring(0,Math.min(22,name.length())));}
  void list(String kind){
-  List<FeedParser.Entry> entries=hub.entries("V2RAY");entries.sort(Comparator.comparingLong(e->ProxyScanner.rank(e.value)));
+  List<FeedParser.Entry> entries=hub.entries("V2RAY");ProxyScanner.sort(entries);
   String[] titles=new String[entries.size()];for(int i=0;i<titles.length;i++)titles[i]=(i+1)+". "+name(entries.get(i))+"\n"+ProxyScanner.label(entries.get(i).value);
   new GlassDialog.Builder(activity).setTitle("V2Ray · "+entries.size()).setItems(titles,(d,w)->entry(entries.get(w)))
    .setNeutralButton("Update + test",(d,w)->activity.refreshAll()).setNegativeButton("Close",null).show();

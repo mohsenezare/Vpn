@@ -46,7 +46,6 @@ public final class SingVpnService extends VpnService {
             startForeground(91,notification("Testing V2Ray configurations…"));
             worker.execute(()->{
                 try{
-                    setupCore();
                     ProxyScanner.run(this,new SourceHub(this).entries("V2RAY"),()->{
                         Intent update=new Intent(ACTION_STATUS).setPackage(getPackageName()).putExtra("scan",true);
                         sendBroadcast(update);

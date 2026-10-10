@@ -60,11 +60,32 @@ jobs:
           name: AegisVPN-Android-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-      - name: Publish downloadable debug APK
-        if: github.event_name == 'push'
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Build x86_64 core for emulator smoke test
         run: |
-          tag="build-${GITHUB_RUN_NUMBER}"
-          cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.5.6-arm64-debug.apk
-          gh release create "$tag" AegisVPN-v0.5.6-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.5.6 · build ${GITHUB_RUN_NUMBER}" --notes "V2Ray only; five user-selected subscriptions; HTTPS latency testing through every supported proxy, automatic fastest successful selection; original glass UI and iOS spinner retained. arm64 debug build."
+          export PATH="$HOME/go/bin:$PATH"
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
+          cd /tmp/sing-box
+          gomobile bind -ldflags=-checklinkname=0 -target=android/amd64 -androidapi=26 -javapkg=io.nekohasekai -libname=box \
+            -tags="with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api" ./experimental/libbox/
+          cp libbox.aar "$GITHUB_WORKSPACE/app/libs/libbox.aar"
+          cd "$GITHUB_WORKSPACE"
+          gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Exercise native test worker on Android
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            adb shell pm grant com.aegis.vpn android.permission.POST_NOTIFICATIONS
+            adb shell am instrument -w com.aegis.vpn.test/com.aegis.vpn.ProbeSmokeInstrumentation > /tmp/probe-smoke.txt
+            cat /tmp/probe-smoke.txt
+            grep -q 'PROBE_SMOKE_PASSED' /tmp/probe-smoke.txt
