@@ -3,9 +3,6 @@ package com.aegis.vpn;
 import android.app.*;
 import android.content.*;
 import android.net.VpnService;
-import android.net.*;
-import java.net.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import android.os.*;
 import android.util.Log;
 import io.nekohasekai.libbox.*;
@@ -18,6 +15,7 @@ import java.util.concurrent.*;
  * Never report connectivity from the count of downloaded configuration URLs.
  */
 public final class SingVpnService extends VpnService {
+    public static final String ACTION_SCAN="com.aegis.vpn.SCAN";
     public static final String ACTION_START="com.aegis.vpn.SING_START";
     public static final String ACTION_STOP="com.aegis.vpn.SING_STOP";
     public static final String ACTION_STATUS="com.aegis.vpn.SING_STATUS";
@@ -31,10 +29,6 @@ public final class SingVpnService extends VpnService {
     private BoxService core;
     private SingBoxPlatform platform;
     private volatile boolean stopping;
-    private volatile String currentConfig;
-    private ScheduledExecutorService watchdog;
-    private int failedHealthChecks=0;
-    public static volatile boolean verifiedRoute=false;
     @Override public void onCreate(){
         super.onCreate();
         NotificationManager manager=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
@@ -43,11 +37,23 @@ public final class SingVpnService extends VpnService {
     @Override public int onStartCommand(Intent intent,int flags,int startId){
         if(intent==null)return START_NOT_STICKY;
         if(ACTION_STOP.equals(intent.getAction())){
-            // Publish OFF immediately even if native startup is still on the worker.
-            // The queued cleanup closes the TUN once the worker returns.
-            stopping=true;currentConfig=null;stopWatchdog();
-            state=OFF;verifiedRoute=false;broadcast();
-            worker.execute(()->{cleanup();stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();});
+            ProxyScanner.cancel();stopping=true;worker.execute(()->{cleanup();state=OFF;broadcast();stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();});
+            return START_NOT_STICKY;
+        }
+        if(ACTION_SCAN.equals(intent.getAction())){
+            if(ProxyScanner.busy)return START_NOT_STICKY;
+            ProxyScanner.busy=true;
+            startForeground(91,notification("Testing V2Ray configurations…"));
+            worker.execute(()->{
+                try{
+                    ProxyScanner.run(this,new SourceHub(this).entries("V2RAY"),()->{
+                        Intent update=new Intent(ACTION_STATUS).setPackage(getPackageName()).putExtra("scan",true);
+                        sendBroadcast(update);
+                    });
+                }catch(Exception e){ProxyScanner.busy=false;ProxyScanner.summary="Unable to start tests";sendBroadcast(new Intent(ACTION_STATUS).setPackage(getPackageName()).putExtra("scan",true));}
+                if(core==null&&state!=STARTING){stopForeground(STOP_FOREGROUND_REMOVE);stopSelf(startId);}
+                else updateNotification("VPN tunnel active");
+            });
             return START_NOT_STICKY;
         }
         if(!ACTION_START.equals(intent.getAction()))return START_NOT_STICKY;
@@ -56,97 +62,34 @@ public final class SingVpnService extends VpnService {
             lastError="Invalid or missing sing-box config";state=FAILED;broadcast();stopSelf();return START_NOT_STICKY;
         }
         startForeground(91,notification("Starting encrypted tunnel…"));
-        currentConfig=config;
-        state=STARTING;lastError="";stopping=false;verifiedRoute=false;broadcast();
-        worker.execute(()->startCore(config));
+        state=STARTING;lastError="";stopping=false;broadcast();
+        worker.execute(()->{
+            try{
+                if(VpnService.prepare(this)!=null)throw new IllegalStateException("VPN permission not granted");
+                cleanup();
+                setupCore();
+                platform=new SingBoxPlatform(this);
+                core=Libbox.newService(config,platform);
+                core.start();
+                if(stopping){cleanup();return;}
+                if(tun==null)throw new IllegalStateException("Core started but VPN TUN was not created");
+                state=TUNNEL_ACTIVE;broadcast();updateNotification("V2Ray tunnel active");
+            }catch(Throwable e){
+                Log.e("AegisSingBox","Core start failed",e);
+                lastError=e.getMessage()==null?e.getClass().getSimpleName():e.getMessage();
+                state=FAILED;broadcast();cleanup();stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();
+            }
+        });
         return START_NOT_STICKY;
     }
-    private void startCore(String config){
-        try{
-            if(stopping)return;
-            if(VpnService.prepare(this)!=null)throw new IllegalStateException("VPN permission not granted");
-            cleanup();
-            java.io.File working=new java.io.File(getFilesDir(),"singbox");
-            working.mkdirs();
-            SetupOptions options=new SetupOptions();
-            options.setBasePath(getFilesDir().getAbsolutePath());
-            options.setWorkingPath(working.getAbsolutePath());
-            options.setTempPath(getCacheDir().getAbsolutePath());
-            Libbox.setup(options);
-            platform=new SingBoxPlatform(this);
-            // Validate on the worker thread; never let one expired/incompatible
-            // public node prevent the other candidates from launching.
-            String candidate=config;
-            for(int tries=0;tries<12;tries++){
-                try{
-                    core=Libbox.newService(candidate,platform);
-                    break;
-                }catch(Exception invalid){
-                    String next=SingBoxConfig.dropInvalidAutoNode(candidate,invalid.getMessage());
-                    if(next==null||next.equals(candidate))throw invalid;
-                    candidate=next;
-                    Log.w("AegisSingBox","Skipped malformed public outbound while initializing");
-                }
-            }
-            if(core==null)throw new IllegalStateException("All generated nodes were rejected");
-            currentConfig=candidate;
-            core.start();
-            if(stopping){cleanup();return;}
-            if(tun==null)throw new IllegalStateException("VPN TUN was not created");
-            state=TUNNEL_ACTIVE;lastError="";broadcast();
-            updateNotification("Encrypted tunnel active · checking route");
-            startWatchdog();
-        }catch(Throwable e){
-            Log.e("AegisSingBox","VPN recovery/start failed",e);
-            lastError=e.getMessage()==null?e.getClass().getSimpleName():e.getMessage();
-            state=FAILED;verifiedRoute=false;broadcast();cleanup();stopWatchdog();
-            stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();
-        }
-    }
-    /** Checks actual HTTPS over Android's VPN network, NOT merely TCP to a public server.
-     * False positives are reduced by trying two independent endpoints and three failures.
-     * Recovery is bounded and rate-limited so a blocked probe cannot create a restart loop.
-     */
-    private void startWatchdog(){
-        if(watchdog!=null&&!watchdog.isShutdown())return;
-        watchdog=Executors.newSingleThreadScheduledExecutor();
-        watchdog.scheduleWithFixedDelay(()->{
-            if(stopping||state!=TUNNEL_ACTIVE)return;
-            try{
-                ConnectivityManager cm=(ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
-                Network vpnNetwork=null;
-                for(Network n:cm.getAllNetworks()){
-                    NetworkCapabilities caps=cm.getNetworkCapabilities(n);
-                    if(caps!=null&&caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
-                      &&caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)){
-                        vpnNetwork=n;break;
-                    }
-                }
-                if(vpnNetwork==null)return;
-                boolean good=checkRoute(vpnNetwork,"https://www.gstatic.com/generate_204",204)||
-                    checkRoute(vpnNetwork,"https://www.cloudflare.com/cdn-cgi/trace",200);
-                if(good){failedHealthChecks=0;verifiedRoute=true;return;}
-                verifiedRoute=false;
-                // Do NOT tear down a functioning sing-box session solely because a
-                // captive/filtered network blocked these particular probe URLs.
-                // URLTest will try alternate proxy outbounds without resetting the TUN.
-                failedHealthChecks++;
-            }catch(Exception e){Log.w("AegisSingBox","Health check skipped",e);}
-        },22,15,TimeUnit.SECONDS);
-    }
-    private boolean checkRoute(Network network,String endpoint,int expected){
-        HttpURLConnection connection=null;
-        try{
-            connection=(HttpURLConnection)network.openConnection(new URL(endpoint));
-            connection.setConnectTimeout(3000);connection.setReadTimeout(3000);
-            connection.setUseCaches(false);connection.setInstanceFollowRedirects(false);
-            return connection.getResponseCode()==expected;
-        }catch(Exception e){return false;}
-        finally{if(connection!=null)connection.disconnect();}
-    }
-    private void stopWatchdog(){
-        if(watchdog!=null){watchdog.shutdownNow();watchdog=null;}
-        failedHealthChecks=0;verifiedRoute=false;
+    private void setupCore()throws Exception {
+                java.io.File working=new java.io.File(getFilesDir(),"singbox");
+                working.mkdirs();
+                SetupOptions options=new SetupOptions();
+                options.setBasePath(getFilesDir().getAbsolutePath());
+                options.setWorkingPath(working.getAbsolutePath());
+                options.setTempPath(getCacheDir().getAbsolutePath());
+                Libbox.setup(options);
     }
     private android.app.Notification notification(String status){
         Intent open=new Intent(this,MainActivity.class);
@@ -156,7 +99,7 @@ public final class SingVpnService extends VpnService {
         return new android.app.Notification.Builder(this,CHANNEL)
             .setContentTitle("Aegis VPN")
             .setContentText(status)
-            .setSmallIcon(android.R.drawable.ic_lock_lock)
+            .setSmallIcon(R.drawable.ic_aegis_status)
             .setOngoing(true)
             .setContentIntent(content)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel,"Disconnect",action)
@@ -166,6 +109,7 @@ public final class SingVpnService extends VpnService {
         ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).notify(91,notification(msg));
     }
     private void broadcast(){
+        AegisShortcuts.nativeStatusChanged(this,state);
         Intent i=new Intent(ACTION_STATUS).setPackage(getPackageName());
         i.putExtra("state",state);i.putExtra("message",lastError);
         sendBroadcast(i);
@@ -214,12 +158,12 @@ public final class SingVpnService extends VpnService {
         tun=null;
     }
     @Override public void onRevoke(){
-        stopping=true;currentConfig=null;stopWatchdog();
+        ProxyScanner.cancel();stopping=true;
         worker.execute(()->{cleanup();state=OFF;broadcast();stopSelf();});
         super.onRevoke();
     }
     @Override public void onDestroy(){
-        stopping=true;currentConfig=null;stopWatchdog();cleanup();state=OFF;broadcast();
+        ProxyScanner.cancel();stopping=true;cleanup();state=OFF;broadcast();
         worker.shutdownNow();super.onDestroy();
     }
 }

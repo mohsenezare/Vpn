@@ -25,32 +25,24 @@ final class ProfileStore {
           .setKeySize(256).build());
         return kg.generateKey();
     }
-    void save(String config,String username,String password) throws Exception{
-        JSONObject data=new JSONObject();
-        data.put("config",config);data.put("username",username);data.put("password",password);
+    // V2Ray shares include credentials; store a pinned link under AndroidKeyStore AES-GCM.
+    void saveNative(String link) throws Exception {
+        if(link==null || link.length()>8192)throw new IllegalArgumentException("Invalid share link");
         Cipher c=Cipher.getInstance("AES/GCM/NoPadding");
         c.init(Cipher.ENCRYPT_MODE,key());
-        byte[] encrypted=c.doFinal(data.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        ctx.getSharedPreferences("paid",0).edit()
+        byte[] encrypted=c.doFinal(link.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        ctx.getSharedPreferences("manual_native",0).edit()
           .putString("iv",Base64.encodeToString(c.getIV(),Base64.NO_WRAP))
           .putString("blob",Base64.encodeToString(encrypted,Base64.NO_WRAP)).apply();
     }
-    boolean exists(){return ctx.getSharedPreferences("paid",0).contains("blob");}
-    String getOpenVpnConfig() throws Exception{
-        android.content.SharedPreferences p=ctx.getSharedPreferences("paid",0);
+    String getNative() throws Exception {
+        android.content.SharedPreferences p=ctx.getSharedPreferences("manual_native",0);
         String iv=p.getString("iv",null),blob=p.getString("blob",null);
         if(iv==null||blob==null)return null;
         Cipher c=Cipher.getInstance("AES/GCM/NoPadding");
         c.init(Cipher.DECRYPT_MODE,key(),new GCMParameterSpec(128,Base64.decode(iv,Base64.NO_WRAP)));
-        JSONObject data=new JSONObject(new String(c.doFinal(Base64.decode(blob,Base64.NO_WRAP)),java.nio.charset.StandardCharsets.UTF_8));
-        String config=data.getString("config");
-        String username=data.optString("username"),password=data.optString("password");
-        if(!username.isEmpty()){
-            config=config.replaceAll("(?ms)<auth-user-pass>.*?</auth-user-pass>","");
-            config=config.replaceAll("(?m)^\\s*auth-user-pass(?:[ \\t]+[^\\r\\n]+)?\\s*$","");
-            config+="\n<auth-user-pass>\n"+username+"\n"+password+"\n</auth-user-pass>\n";
-        }
-        return config;
+        return new String(c.doFinal(Base64.decode(blob,Base64.NO_WRAP)),java.nio.charset.StandardCharsets.UTF_8);
     }
-    void clear(){ctx.getSharedPreferences("paid",0).edit().clear().apply();}
+    void clearNative(){ctx.getSharedPreferences("manual_native",0).edit().clear().apply();}
+    boolean nativeSelected(){return ctx.getSharedPreferences("manual_native",0).contains("blob");}
 }

@@ -40,8 +40,9 @@ jobs:
           git clone --depth=1 --branch v1.12.22 https://github.com/SagerNet/sing-box.git /tmp/sing-box
           cd /tmp/sing-box
           test "$(git rev-parse HEAD)" = "f63091d14d8984d53dc9a5563cb72af978b9779e"
+          cp "$GITHUB_WORKSPACE/app/native/aegis_latency.go" experimental/libbox/aegis_latency.go
           gomobile bind -ldflags=-checklinkname=0 -target=android/arm64 -androidapi=26 -javapkg=io.nekohasekai -libname=box \
-            -tags="with_gvisor,with_quic,with_utls,with_clash_api" \
+            -tags="with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api" \
             ./experimental/libbox/
           mkdir -p "$GITHUB_WORKSPACE/app/libs"
           cp libbox.aar "$GITHUB_WORKSPACE/app/libs/libbox.aar"
@@ -50,6 +51,8 @@ jobs:
         run: |
           javac -d /tmp/parser-tests app/src/main/java/com/aegis/vpn/FeedParser.java tests/FeedParserTest.java
           java -cp /tmp/parser-tests com.aegis.vpn.FeedParserTest
+          javac -d /tmp/parser-tests app/src/main/java/com/aegis/vpn/TrafficMeter.java tests/TrafficMeterTest.java
+          java -cp /tmp/parser-tests com.aegis.vpn.TrafficMeterTest
       - name: Compile debug APK
         run: gradle --no-daemon :app:assembleDebug
       - uses: actions/upload-artifact@v4
@@ -57,11 +60,33 @@ jobs:
           name: AegisVPN-Android-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-      - name: Publish downloadable debug APK
-        if: github.event_name == 'push'
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Build x86_64 core for emulator smoke test
         run: |
-          tag="build-${GITHUB_RUN_NUMBER}"
-          cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.12.0-arm64-debug.apk
-          gh release create "$tag" AegisVPN-v0.12.0-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.12.0 · build ${GITHUB_RUN_NUMBER}" --notes "Experimental arm64 build. Version 0.5 Smart Mode pool and its 12-server sing-box URLTest restored with supplemental fallback feeds. True cached backdrop blur on glass cards; transparent Settings/Locations sheets. Manual selection and measured TCP latency preserved. No server is guaranteed; real-device checks are required." || echo "Release publishing unavailable (GitHub App permissions); APK artifact was successfully uploaded."
+          export PATH="$HOME/go/bin:$PATH"
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
+          cd /tmp/sing-box
+          gomobile bind -ldflags=-checklinkname=0 -target=android/amd64 -androidapi=26 -javapkg=io.nekohasekai -libname=box \
+            -tags="with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api" ./experimental/libbox/
+          cp libbox.aar "$GITHUB_WORKSPACE/app/libs/libbox.aar"
+          cd "$GITHUB_WORKSPACE"
+          gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Exercise native test worker on Android
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            adb shell pm grant com.aegis.vpn android.permission.POST_NOTIFICATIONS
+            adb shell am instrument -w com.aegis.vpn.test/com.aegis.vpn.ProbeSmokeInstrumentation > /tmp/probe-smoke.txt
+            cat /tmp/probe-smoke.txt
+            adb logcat -d -s AndroidRuntime GoLog libc System.err
+            grep -q 'PROBE_SMOKE_PASSED' /tmp/probe-smoke.txt
