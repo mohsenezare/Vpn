@@ -32,7 +32,12 @@ final class HubPanel {
  void pad(View v,int l,int t,int r,int b){v.setPadding(px(l),px(t),px(r),px(b));}
  void space(LinearLayout c,int h){View s=new View(activity);c.addView(s,new LinearLayout.LayoutParams(1,px(h)));}
  void row(LinearLayout body,String title,String subtitle,int tint,Runnable action){
-  LinearLayout outer=col();outer.setBackground(bg(0xcaffffff,22));
+  LinearLayout outer=col();
+  GradientDrawable frosted=new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+      new int[]{0xc9ffffff,0x82f7fff9,0xaaffffff});
+  frosted.setCornerRadius(px(22));
+  frosted.setStroke(Math.max(1,px(.85f)),0xe5ffffff);
+  outer.setBackground(frosted);
   LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.bottomMargin=px(9);body.addView(outer,lp);
   LinearLayout line=new LinearLayout(activity);line.setGravity(Gravity.CENTER_VERTICAL);pad(line,16,13,15,12);outer.addView(line);
   View dot=new View(activity);dot.setBackground(bg(tint,11));
@@ -57,7 +62,12 @@ final class HubPanel {
  interface SheetContent{void render(LinearLayout body,Dialog dialog);}
  void sheet(String title,String detail,SheetContent render){
   Dialog dialog=new Dialog(activity);
-  LinearLayout root=col();root.setBackground(bg(0xfff5f8f7,34));pad(root,18,12,18,18);
+  LinearLayout root=col();
+   GradientDrawable glass=new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+       new int[]{0xe3fffefd,0xb8ecfff7,0xd8ffffff});
+   glass.setCornerRadii(new float[]{px(34),px(34),px(34),px(34),0,0,0,0});
+   glass.setStroke(Math.max(1,px(1)),0xe9ffffff);
+   root.setBackground(glass);pad(root,18,12,18,18);
   View grab=new View(activity);grab.setBackground(bg(0xffced6d7,5));
   LinearLayout.LayoutParams gp=new LinearLayout.LayoutParams(px(44),px(5));gp.gravity=Gravity.CENTER;gp.bottomMargin=px(16);root.addView(grab,gp);
   LinearLayout top=new LinearLayout(activity);top.setGravity(Gravity.CENTER_VERTICAL);root.addView(top);
@@ -77,6 +87,8 @@ final class HubPanel {
    window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
    WindowManager.LayoutParams p=window.getAttributes();p.gravity=Gravity.BOTTOM;p.width=-1;p.height=-2;p.dimAmount=.31f;window.setAttributes(p);
    window.setNavigationBarColor(0xfff5f8f7);
+    // Android 12+ blurs behind the translucent sheet; earlier devices keep alpha.
+    if(Build.VERSION.SDK_INT>=31)window.setBackgroundBlurRadius(px(25));
   }
   dialog.show();
   if(window!=null)window.setLayout(-1,-2);
