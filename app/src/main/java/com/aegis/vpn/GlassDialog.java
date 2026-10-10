@@ -12,7 +12,7 @@ final class GlassDialog {
    AlertDialog d=super.show();Window w=d.getWindow();
    if(w!=null){
     float density=getContext().getResources().getDisplayMetrics().density;
-    GradientDrawable bg=new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{0xfafefbf6,0xebffffff,0xf4effaf5});
+    GradientDrawable bg=new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{0xbdfefbf6,0x95ffffff,0xafeffaf5});
     bg.setCornerRadius(30*density);bg.setStroke((int)density,Color.WHITE);
     w.setBackgroundDrawable(bg);w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);w.setDimAmount(.24f);
     if(Build.VERSION.SDK_INT>=31){w.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND);w.getAttributes().setBlurBehindRadius((int)(24*density));w.setAttributes(w.getAttributes());w.setBackgroundBlurRadius((int)(32*density));}

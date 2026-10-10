@@ -41,6 +41,15 @@ public final class MainActivity extends Activity {
     private String error="";
     private ArrayList<FreeDirectory.Node> servers=new ArrayList<>();
     private Handler handler=new Handler(Looper.getMainLooper());
+    private final TrafficMeter trafficMeter=new TrafficMeter();
+    private final Runnable trafficPolling=new Runnable(){
+        @Override public void run(){
+            trafficMeter.sample(android.os.SystemClock.elapsedRealtime(),
+                android.net.TrafficStats.getTotalRxBytes(),android.net.TrafficStats.getTotalTxBytes(),isTunnelOn());
+            if(screen!=null&&(tab==0||tab==2))screen.invalidate();
+            handler.postDelayed(this,1000L);
+        }
+    };
 
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);
@@ -60,6 +69,7 @@ public final class MainActivity extends Activity {
         });
         screen=new Screen();
         setContentView(screen);
+        handler.post(trafficPolling);
         hub=new SourceHub(this);hubPanel=new HubPanel(this,hub);
         IntentFilter nativeFilter=new IntentFilter(SingVpnService.ACTION_STATUS);
         if(Build.VERSION.SDK_INT>=33)registerReceiver(nativeEvents,nativeFilter,Context.RECEIVER_NOT_EXPORTED);
@@ -70,6 +80,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onDestroy(){
         try{unregisterReceiver(nativeEvents);}catch(Exception ignored){}
+        handler.removeCallbacks(trafficPolling);
         vpn.close();super.onDestroy();
     }
     @Override @Deprecated protected void onActivityResult(int request,int result,Intent data){
@@ -435,6 +446,12 @@ public final class MainActivity extends Activity {
             p.setStyle(Paint.Style.STROKE);p.setColor(active==GREEN?0x2393edc5:0x28ffb978);
             p.setStrokeWidth(1);c.drawCircle(W/2,sy+45,98,p);c.drawCircle(W/2,sy+45,112,p);
             p.setStyle(Paint.Style.FILL);
+            // Compact live speed display in the existing gap above the mode selector.
+            card(c,18,sy-106,W-36,37,18,0x90ffffff,0xffffffff);
+            txt(c,"↓",34,sy-81,18,GREEN,true);
+            txt(c,trafficMeter.download(),56,sy-81,14,INK,true);
+            txt(c,"↑",W/2+7,sy-81,18,ORANGE,true);
+            txt(c,trafficMeter.upload(),W/2+29,sy-81,14,INK,true);
             // Dedicated mode selector above the unchanged connection slider.
             boolean v2Selected=preferNative&&!paidMode;
             float modeW=(W-58)/2;
@@ -507,9 +524,9 @@ public final class MainActivity extends Activity {
                 isConnecting()?"Connecting...":"Disconnected",
                 40,257,22,isTunnelOn()?GREEN:INK,true);
             card(c,18,323,W-36,150,26,0xeaffffff,0xffffffff);
-            txt(c,"Download",40,368,16,MUTED,false);txt(c,"— Mbps",W-130,368,17,INK,true);
-            txt(c,"Upload",40,423,16,MUTED,false);txt(c,"— Mbps",W-130,423,17,INK,true);
-            txt(c,"Speed values require real tunnel telemetry.",24,506,12,MUTED,false);
+            txt(c,"Download",40,368,16,MUTED,false);txt(c,trafficMeter.download(),W-145,368,17,INK,true);
+            txt(c,"Upload",40,423,16,MUTED,false);txt(c,trafficMeter.upload(),W-145,423,17,INK,true);
+            txt(c,"Live device traffic · not VPN-only · active tunnel",24,506,12,MUTED,false);
         }
         void navbar(Canvas c){
             float top=H-74;

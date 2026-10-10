@@ -50,6 +50,8 @@ jobs:
         run: |
           javac -d /tmp/parser-tests app/src/main/java/com/aegis/vpn/FeedParser.java tests/FeedParserTest.java
           java -cp /tmp/parser-tests com.aegis.vpn.FeedParserTest
+          javac -d /tmp/parser-tests app/src/main/java/com/aegis/vpn/TrafficMeter.java tests/TrafficMeterTest.java
+          java -cp /tmp/parser-tests com.aegis.vpn.TrafficMeterTest
       - name: Compile debug APK
         run: gradle --no-daemon :app:assembleDebug
       - uses: actions/upload-artifact@v4
@@ -63,5 +65,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="build-${GITHUB_RUN_NUMBER}"
-          cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.5.2-arm64-debug.apk
-          gh release create "$tag" AegisVPN-v0.5.2-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.5.2 · build ${GITHUB_RUN_NUMBER}" --notes "Debug APK. OpenVPN requires OpenVPN for Android; Embedded sing-box native tunnel for VLESS/VMess/Trojan/SS/Hysteria2; Home screen smart V2Ray/OpenVPN selector; no Telegram or NapsternetV. Connection on your ISP has not been verified."
+          cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.5.3-arm64-debug.apk
+          gh release create "$tag" AegisVPN-v0.5.3-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.5.3 · build ${GITHUB_RUN_NUMBER}" --notes "Debug APK. OpenVPN requires OpenVPN for Android; Embedded sing-box native tunnel for VLESS/VMess/Trojan/SS/Hysteria2; Home screen smart V2Ray/OpenVPN selector; live device-wide network rates (not VPN-only), enhanced glass cards; no Telegram or NapsternetV. Connection on your ISP has not been verified."

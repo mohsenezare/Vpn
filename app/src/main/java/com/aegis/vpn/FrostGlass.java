@@ -74,14 +74,20 @@ final class FrostGlass {
         canvas.save();canvas.clipPath(mask);
         paint.setAlpha(255);
         canvas.drawBitmap(frost,null,new RectF(0,0,fullW,fullH),paint);
-        // Glass tint lets the real blurred backdrop show through.
+        // Frosted translucency, plus a top-left light reflection on every card.
         paint.setShader(new LinearGradient(x,y,x+w,y+h,
-            (bg&0x00ffffff)|0x85ffffff,0x4dffffff,Shader.TileMode.CLAMP));
+            0x63ffffff,0x25ffffff,Shader.TileMode.CLAMP));
         canvas.drawRect(x,y,x+w,y+h,paint);paint.setShader(null);
+        paint.setShader(new LinearGradient(x,y,x,y+h*.55f,
+            0x77ffffff,0x00ffffff,Shader.TileMode.CLAMP));
+        canvas.drawRect(x,y,x+w,y+h*.55f,paint);paint.setShader(null);
         canvas.restore();
-        paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(1.25f);
-        paint.setColor(border==0?0x96ffffff:((border&0x00ffffff)|0xa8000000));
-        canvas.drawRoundRect(x+.7f,y+.7f,x+w-.7f,y+h-.7f,radius,radius,paint);
+        // Two crisp glass-edge reflections remain legible on pale backgrounds.
+        paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(1.5f);
+        paint.setColor(0xd5ffffff);
+        canvas.drawRoundRect(x+.8f,y+.8f,x+w-.8f,y+h-.8f,radius,radius,paint);
+        paint.setStrokeWidth(.8f);paint.setColor(0x42a3aeb9);
+        canvas.drawRoundRect(x+2.0f,y+2.0f,x+w-2.0f,y+h-2.0f,Math.max(1,radius-1),Math.max(1,radius-1),paint);
         paint.setStyle(Paint.Style.FILL);
     }
 }

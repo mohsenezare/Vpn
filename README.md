@@ -63,3 +63,10 @@ Public Telegram links/file-post references are also mirrored by GitHub Actions e
 - Adds V2Ray Smart/OpenVPN mode selection on the Home screen immediately above the existing connection slider. Mode is strictly obeyed; missing servers do not cause a silent protocol switch.
 - Removes Telegram proxies and NapsternetV from the app, parser, source fetcher and mirrored feeds. Keeps free and paid OpenVPN support plus V2Ray.
 - Leaves the 0.5 Home slider, layout, glass cards, animations, stats and remaining features intact.
+
+## 0.5.3 live speeds and all-glass cards (locked layout)
+
+- Every current rounded card has a more pronounced frosted reflection, and the already-blurred modal dialog backgrounds are translucent. All previous geometry and controls are preserved.
+- Adds a compact Download / Upload strip in the existing Home screen gap, and replaces the Stats placeholder numbers with current measured rates.
+- Rates are derived from **Android TrafficStats device-wide receive/transmit counters, sampled every second while the VPN tunnel is active**. These are real device totals, *not per-VPN counters*; they may include background app traffic and tunnel overhead, and may overcount traffic. Displayed as 0.00 Mbps while disconnected, and unavailable when Android does not expose counters. These numbers must not be represented as an isolated VPN speed test.
+- Existing V2Ray and OpenVPN engines and selection logic are unchanged.
