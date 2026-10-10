@@ -42,7 +42,7 @@ final class HubPanel {
   if(e.kind.equals("NAPSTERNETV")){launch(e.value);return;}
   AlertDialog.Builder dialog=new GlassDialog.Builder(activity).setTitle("V2Ray connection")
    .setMessage("Use the Aegis built-in sing-box engine. A public configuration may be offline; starting the TUN alone does not prove upstream connectivity.")
-   .setPositiveButton("Connect in Aegis",(d,w)->activity.connectNativeEntry(e.value))
+   .setPositiveButton("Select + connect in Aegis",(d,w)->activity.connectNativeEntry(e.value))
    .setNeutralButton("Copy for v2rayNG",(d,w)->{
     ((android.content.ClipboardManager)activity.getSystemService(Context.CLIPBOARD_SERVICE))
       .setPrimaryClip(ClipData.newPlainText("VPN configuration",e.value));
