@@ -99,10 +99,7 @@ public final class MainActivity extends Activity {
         preferNative=getPreferences(MODE_PRIVATE).getBoolean("prefer_native",true);
         smartNative=getPreferences(MODE_PRIVATE).getBoolean("smart_native",true);
         selectedIndex=getPreferences(MODE_PRIVATE).getInt("selected",0);
-        vpn=new VpnController(this, () -> screen.invalidate(), msg -> {
-            new GlassDialog.Builder(this).setTitle("OpenVPN").setMessage(msg).setPositiveButton("OK",null).show();
-            screen.invalidate();
-        },this::handleOpenVpnFailure);
+        vpn=new VpnController(this, () -> screen.invalidate(),this::handleOpenVpnFailure);
         hub=new SourceHub(this);hubPanel=new HubPanel(this,hub);
         screen=new Screen();
         setContentView(screen);
