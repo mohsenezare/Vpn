@@ -44,7 +44,7 @@ def directory_nodes(raw):
     if not nodes:raise ValueError("no valid OpenVPN relays in origin CSV")
     import math
     def quality(n):
-        tcp=bool(re.search(r"(?im)^\\s*proto\\s+tcp",n["ovpn"]))
+        tcp=bool(re.search(r"(?im)^\s*proto\s+tcp",n["ovpn"]))
         return math.log1p(n["speed"]/1_000_000)*2.4+math.log1p(n["uptime"]/3600000)*.5+(2 if tcp else 0)-min(n["ping"] or 300,600)*.004
     nodes.sort(key=quality,reverse=True)
     result=[];seen_country={}
