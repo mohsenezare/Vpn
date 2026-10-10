@@ -41,7 +41,7 @@ jobs:
           cd /tmp/sing-box
           test "$(git rev-parse HEAD)" = "f63091d14d8984d53dc9a5563cb72af978b9779e"
           gomobile bind -ldflags=-checklinkname=0 -target=android/arm64 -androidapi=26 -javapkg=io.nekohasekai -libname=box \
-            -tags="with_gvisor,with_quic,with_utls,with_clash_api" \
+            -tags="with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api" \
             ./experimental/libbox/
           mkdir -p "$GITHUB_WORKSPACE/app/libs"
           cp libbox.aar "$GITHUB_WORKSPACE/app/libs/libbox.aar"
@@ -63,5 +63,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="build-${GITHUB_RUN_NUMBER}"
-          cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.12.0-arm64-debug.apk
-          gh release create "$tag" AegisVPN-v0.12.0-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.12.0 · build ${GITHUB_RUN_NUMBER}" --notes "Experimental arm64 build. Version 0.5 Smart Mode pool and its 12-server sing-box URLTest restored with supplemental fallback feeds. True cached backdrop blur on glass cards; transparent Settings/Locations sheets. Manual selection and measured TCP latency preserved. No server is guaranteed; real-device checks are required." || echo "Release publishing unavailable (GitHub App permissions); APK artifact was successfully uploaded."
+          cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.5.2-arm64-debug.apk
+          gh release create "$tag" AegisVPN-v0.5.2-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.5.2 · build ${GITHUB_RUN_NUMBER}" --notes "Debug APK. OpenVPN requires OpenVPN for Android; Embedded sing-box native tunnel for VLESS/VMess/Trojan/SS/Hysteria2; Home screen smart V2Ray/OpenVPN selector; no Telegram or NapsternetV. Connection on your ISP has not been verified."
