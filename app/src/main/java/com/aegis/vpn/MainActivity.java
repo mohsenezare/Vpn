@@ -134,7 +134,7 @@ public final class MainActivity extends Activity {
             finished.run();
         });
         hub.refresh(()->{
-            nativeCacheAt=0;
+            nativeCacheAt=0;nativeCountAt=0;
             sourceResult[0]="V2Ray: "+hub.entries("V2RAY").size()+
                 " | Proxies: "+hub.entries("PROXY").size()+
                 " | NapsternetV: "+hub.entries("NAPSTERNETV").size();
@@ -173,6 +173,17 @@ public final class MainActivity extends Activity {
             .setSingleChoiceItems(items,Math.min(selectedIndex,items.length-1),(d,which)->{
                 selectedIndex=which;paidMode=false;preferNative=false;persist();d.dismiss();screen.invalidate();
             }).setNegativeButton("Close",null).show();
+    }
+    private int nativeCountCache=0;
+    private long nativeCountAt=0;
+    int nativeConfigCount(){
+        if(hub==null)return 0;
+        long now=android.os.SystemClock.elapsedRealtime();
+        if(nativeCountAt==0||now-nativeCountAt>15000L){
+            nativeCountCache=hub.entries("V2RAY").size();
+            nativeCountAt=now;
+        }
+        return nativeCountCache;
     }
     private boolean hasNativeCache;
     private long nativeCacheAt;
@@ -446,7 +457,7 @@ public final class MainActivity extends Activity {
                 (servers.isEmpty()?"No free OpenVPN relay":servers.get(Math.min(selectedIndex,servers.size()-1)).country);
             String subtitle=paidMode?"Imported .ovpn profile":
                 preferNative&&pinnedNative?"Pinned server · tap library to change":
-                preferNative&&hasNativeCandidates()?(hub.entries("V2RAY").size()+" config candidates · not validated"):
+                preferNative&&hasNativeCandidates()?(nativeConfigCount()+" config candidates · not validated"):
                 (servers.isEmpty()?"Tap Smart update to refresh":servers.get(Math.min(selectedIndex,servers.size()-1)).host);
             txt(c,name,98,cy+38,15,INK,true);
             txt(c,subtitle.length()>32?subtitle.substring(0,31)+"…":subtitle,98,cy+61,11,MUTED,false);
@@ -519,7 +530,7 @@ public final class MainActivity extends Activity {
                 if(y<85){if(x>W-85)showSettings();else if(x<85)hubPanel.open();return true;}
                 if(tab==0&&y>serverY()+168&&y<serverY()+210){hubPanel.open();return true;}
                 if(tab==0&&y>serverY()+98&&y<serverY()+160){refreshAll();return true;}
-                if(tab==0&&y>serverY()&&y<serverY()+88){selectServer();return true;}
+                if(tab==0&&y>serverY()&&y<serverY()+88){if(preferNative&&!paidMode)hubPanel.list("V2RAY");else selectServer();return true;}
                 if(tab==1){
                     if(y>185&&y<247){refreshAll();return true;}
                     if(y>=260){int i=(int)((y-260)/76);if(i>=0&&i<servers.size()){
