@@ -33,7 +33,7 @@ public final class MainActivity extends Activity {
     private final BroadcastReceiver nativeEvents=new BroadcastReceiver(){
         @Override public void onReceive(Context context,Intent intent){
             if(screen!=null)screen.invalidate();
-            AegisShortcuts.publish(this,isTunnelOn(),isConnecting());
+            AegisShortcuts.publish(MainActivity.this,isTunnelOn(),isConnecting());
             if(intent.getIntExtra("state",0)==SingVpnService.FAILED)
                 info("Embedded VPN error: "+intent.getStringExtra("message"));
         }
