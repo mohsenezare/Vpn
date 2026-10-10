@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
     paths: ['app/**', 'tests/**', '*.gradle', 'gradle.properties', '.github/workflows/android-apk.yml']
+  pull_request:
+    paths: ['app/**', 'tests/**', '*.gradle', 'gradle.properties', '.github/workflows/android-apk.yml']
   workflow_dispatch:
 permissions:
   contents: write
@@ -56,9 +58,10 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
       - name: Publish downloadable debug APK
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="build-${GITHUB_RUN_NUMBER}"
-          cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.5.0-arm64-debug.apk
-          gh release create "$tag" AegisVPN-v0.5.0-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.5.0 · build ${GITHUB_RUN_NUMBER}" --notes "Debug APK. OpenVPN requires OpenVPN for Android; Embedded sing-box native tunnel for VLESS/VMess/Trojan/SS/Hysteria2; Telegram proxies and NapsternetV file posts open externally. Connection on your ISP has not been verified."
+          cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.5.1-arm64-debug.apk
+          gh release create "$tag" AegisVPN-v0.5.1-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.5.1 · build ${GITHUB_RUN_NUMBER}" --notes "Debug APK. OpenVPN requires OpenVPN for Android; Embedded sing-box native tunnel for VLESS/VMess/Trojan/SS/Hysteria2; Telegram proxies and NapsternetV file posts open externally. Connection on your ISP has not been verified."
