@@ -16,8 +16,6 @@ public final class RefreshJob extends JobService {
     @Override public boolean onStartJob(JobParameters p){
         new Thread(()->{
             boolean failed=false;
-            try{FreeDirectory d=new FreeDirectory(getApplicationContext());if(d.isStale())d.fetch();}
-            catch(Exception e){failed=true;}
             SourceHub hub=new SourceHub(getApplicationContext());if(hub.stale())hub.fetch();
             final boolean retry=failed;
             new Handler(Looper.getMainLooper()).post(()->jobFinished(p,retry));

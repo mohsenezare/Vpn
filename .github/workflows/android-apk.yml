@@ -40,8 +40,9 @@ jobs:
           git clone --depth=1 --branch v1.12.22 https://github.com/SagerNet/sing-box.git /tmp/sing-box
           cd /tmp/sing-box
           test "$(git rev-parse HEAD)" = "f63091d14d8984d53dc9a5563cb72af978b9779e"
+          cp "$GITHUB_WORKSPACE/app/native/aegis_latency.go" experimental/libbox/aegis_latency.go
           gomobile bind -ldflags=-checklinkname=0 -target=android/arm64 -androidapi=26 -javapkg=io.nekohasekai -libname=box \
-            -tags="with_gvisor,with_quic,with_utls,with_clash_api" \
+            -tags="with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api" \
             ./experimental/libbox/
           mkdir -p "$GITHUB_WORKSPACE/app/libs"
           cp libbox.aar "$GITHUB_WORKSPACE/app/libs/libbox.aar"
@@ -50,6 +51,8 @@ jobs:
         run: |
           javac -d /tmp/parser-tests app/src/main/java/com/aegis/vpn/FeedParser.java tests/FeedParserTest.java
           java -cp /tmp/parser-tests com.aegis.vpn.FeedParserTest
+          javac -d /tmp/parser-tests app/src/main/java/com/aegis/vpn/TrafficMeter.java tests/TrafficMeterTest.java
+          java -cp /tmp/parser-tests com.aegis.vpn.TrafficMeterTest
       - name: Compile debug APK
         run: gradle --no-daemon :app:assembleDebug
       - uses: actions/upload-artifact@v4
@@ -63,5 +66,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="build-${GITHUB_RUN_NUMBER}"
-          cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.12.0-arm64-debug.apk
-          gh release create "$tag" AegisVPN-v0.12.0-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.12.0 · build ${GITHUB_RUN_NUMBER}" --notes "Experimental arm64 build. Version 0.5 Smart Mode pool and its 12-server sing-box URLTest restored with supplemental fallback feeds. True cached backdrop blur on glass cards; transparent Settings/Locations sheets. Manual selection and measured TCP latency preserved. No server is guaranteed; real-device checks are required." || echo "Release publishing unavailable (GitHub App permissions); APK artifact was successfully uploaded."
+          cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.5.6-arm64-debug.apk
+          gh release create "$tag" AegisVPN-v0.5.6-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.5.6 · build ${GITHUB_RUN_NUMBER}" --notes "V2Ray only; five user-selected subscriptions; HTTPS latency testing through every supported proxy, automatic fastest successful selection; original glass UI and iOS spinner retained. arm64 debug build."
