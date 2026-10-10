@@ -17,6 +17,8 @@ final class SourceHub {
   ArrayList<String> s=new ArrayList<>();
   // Source-published multi-round HTTP-tested proxies; always re-test on device.
   s.add("https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/top100.txt");
+  // User-chosen frequently refreshed FAST feed, Base64 subscription supported by FeedParser.
+  s.add("https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/fast/configs_base64.txt");
   s.add("https://raw.githubusercontent.com/Au1rxx/free-vpn-subscriptions/main/output/v2ray-base64.txt");
   // Preserve the v0.5 original fallback, without treating it as verified.
   s.add("https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/Eternity.txt");
