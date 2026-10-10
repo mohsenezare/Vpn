@@ -17,14 +17,15 @@ final class GlassDialog {
    if(w!=null){
     float scale=getContext().getResources().getDisplayMetrics().density;
     GradientDrawable background=new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-      new int[]{0xfcfffcf8,0xf8ffffff,0xf3fafff9});
+      new int[]{0xd6fffcf8,0xa0ffffff,0xbdfafff9});
     background.setCornerRadius(scale*31);
     background.setStroke(Math.max(1,(int)scale),0xdfffffff);
     w.setBackgroundDrawable(background);
     w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
     WindowManager.LayoutParams params=w.getAttributes();
     params.dimAmount=.30f;w.setAttributes(params);
-    // Avoid expensive live backdrop blurs; soft translucent glass + dim is GPU-friendly.
+    // Native blur is only active when a dialog is visible on Android 12+.
+     if(Build.VERSION.SDK_INT>=31)w.setBackgroundBlurRadius((int)(scale*22));
     w.setLayout((int)(getContext().getResources().getDisplayMetrics().widthPixels*.90f),
         WindowManager.LayoutParams.WRAP_CONTENT);
     View root=w.getDecorView();
