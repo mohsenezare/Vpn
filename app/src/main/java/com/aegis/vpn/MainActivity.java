@@ -32,6 +32,8 @@ public final class MainActivity extends Activity {
     private int tab=0, selectedIndex=0;
     private boolean paidMode=false;
     private boolean preferNative=true;
+    private int openVpnRetries=0;
+    private boolean openProbeQueued=false;
     private String pendingNativeConfig;
     private static final int PREPARE_NATIVE=8292;
     private final BroadcastReceiver nativeEvents=new BroadcastReceiver(){
@@ -97,14 +99,11 @@ public final class MainActivity extends Activity {
         preferNative=getPreferences(MODE_PRIVATE).getBoolean("prefer_native",true);
         smartNative=getPreferences(MODE_PRIVATE).getBoolean("smart_native",true);
         selectedIndex=getPreferences(MODE_PRIVATE).getInt("selected",0);
-        vpn=new VpnController(this, () -> screen.invalidate(), msg -> {
-            new GlassDialog.Builder(this).setTitle("OpenVPN").setMessage(msg).setPositiveButton("OK",null).show();
-            screen.invalidate();
-        });
+        vpn=new VpnController(this, () -> screen.invalidate(),this::handleOpenVpnFailure);
+        hub=new SourceHub(this);hubPanel=new HubPanel(this,hub);
         screen=new Screen();
         setContentView(screen);
-        if(!servers.isEmpty())openProbe.run(servers,()->screen.invalidate());
-        hub=new SourceHub(this);hubPanel=new HubPanel(this,hub);
+        if(!servers.isEmpty())openProbe.run(servers,this::reorderFreeServers);
         IntentFilter nativeFilter=new IntentFilter(SingVpnService.ACTION_STATUS);
         if(Build.VERSION.SDK_INT>=33)registerReceiver(nativeEvents,nativeFilter,Context.RECEIVER_NOT_EXPORTED);
         else registerReceiver(nativeEvents,nativeFilter);
@@ -186,8 +185,34 @@ public final class MainActivity extends Activity {
             startNativeService(config);
         }else connectNative(config);
     }
+    /** Tries up to three distinct relays after confirmed failure, never a fake success.
+     * Skip hosts whose TCP port was demonstrably unreachable on this device.
+     * A paid account is never silently replaced with a volunteer relay. */
+    void handleOpenVpnFailure(String why){
+        if(paidMode||preferNative||servers.isEmpty()||
+           why.startsWith("Install")||why.contains("permission")||
+           why.contains("authorization")||why.contains("Could not start")){
+            info(why);return;
+        }
+        if(openVpnRetries>=2){info("Free OpenVPN did not connect after 3 attempts. "+
+            "Try a different network or use a working native configuration. Last error: "+why);return;}
+        int next=-1;
+        for(int i=selectedIndex+1;i<servers.size();i++){
+            if(openProbe.ms(servers.get(i))!=-1){next=i;break;}
+        }
+        if(next<0){info("No additional reachable free OpenVPN ports. Last error: "+why);return;}
+        openVpnRetries++;
+        selectedIndex=next;persist();screen.invalidate();
+        final String nextConfig=servers.get(next).config;
+        Toast.makeText(this,"OpenVPN retry "+(openVpnRetries+1)+"/3 · next server",Toast.LENGTH_SHORT).show();
+        handler.postDelayed(()->{
+            if(!paidMode&&!preferNative&&vpn.state==VpnController.State.OFF)
+                vpn.connect(nextConfig);
+        },500);
+    }
     void selectOpenVpnServer(int index){
         if(index<0||index>=servers.size())return;
+        openVpnRetries=0;
         selectedIndex=index;paidMode=false;preferNative=false;persist();
         String ovpn=servers.get(index).config;
         if(SingVpnService.state==SingVpnService.TUNNEL_ACTIVE||SingVpnService.state==SingVpnService.STARTING){
@@ -230,18 +255,48 @@ public final class MainActivity extends Activity {
         }
     }
     void info(String msg){new GlassDialog.Builder(this).setMessage(msg==null?"Unknown error":msg).setPositiveButton("OK",null).show();}
+    /** Reachable TCP handshakes rank first, unknown probes next, failed handshakes last.
+     * None of these preflight tests proves OpenVPN authentication or data routing. */
+    void reorderFreeServers(){
+        if(servers.isEmpty())return;
+        String current=servers.get(Math.min(selectedIndex,servers.size()-1)).config;
+        boolean keepCurrent=isTunnelOn()||isConnecting();
+        servers.sort((a,b)->{
+            long am=openProbe.ms(a),bm=openProbe.ms(b);
+            int at=am>=0?0:am==-2?1:am==-3?2:3;
+            int bt=bm>=0?0:bm==-2?1:bm==-3?2:3;
+            if(at!=bt)return Integer.compare(at,bt);
+            if(at==0&&am!=bm)return Long.compare(am,bm);
+            return Double.compare(FreeDirectory.rating(b),FreeDirectory.rating(a));
+        });
+        selectedIndex=0;
+        if(keepCurrent){
+            for(int i=0;i<servers.size();i++)
+                if(servers.get(i).config.equals(current)){selectedIndex=i;break;}
+        }
+        persist();
+        if(screen!=null)screen.invalidate();
+        if(openProbeQueued){
+            openProbeQueued=false;
+            measureOpenVpn();
+        }
+    }
+    void measureOpenVpn(){
+        if(openProbe.busy){openProbeQueued=true;return;}
+        openProbe.run(new ArrayList<>(servers),this::reorderFreeServers);
+    }
     void refresh(boolean notify){
         if(notify) Toast.makeText(this,"Updating free VPN Gate servers...",Toast.LENGTH_SHORT).show();
         directory.update(list -> {
             servers=list;
-            if(selectedIndex>=servers.size()) selectedIndex=0;
-            openProbe.run(list,()->screen.invalidate());
+            selectedIndex=0;
             screen.invalidate();
-            if(notify) Toast.makeText(this, list.size()+" free servers available",Toast.LENGTH_SHORT).show();
+            measureOpenVpn();
+            if(notify) Toast.makeText(this,list.size()+" free profiles; testing real TCP reachability",Toast.LENGTH_SHORT).show();
         }, err -> {if(notify)info("Directory refresh failed. Last saved servers retained.\n"+err);});
     }
-    /** Update OpenVPN and all public config sources, then pick the lowest directory-reported
-     * ping for free mode. This is not proof of a successful VPN handshake. */
+    /** Update public sources and rerank free TCP endpoints using measurements on device.
+     * No directory-provided ping is mistaken for successful VPN authentication. */
     void refreshAll(){
         if(updatingAll){info("A source update is already running.");return;}
         updatingAll=true;screen.invalidate();
@@ -253,15 +308,15 @@ public final class MainActivity extends Activity {
             if(outstanding[0]!=0)return;
             updatingAll=false;screen.invalidate();
             info("Update complete.\n"+openVpnResult[0]+"\n"+sourceResult[0]+
-                "\nSelection uses directory-reported ping, not a verified VPN connection.");
+                "\nTCP ports are sorted by measured on-device latency. VPN login and routing still require a connection.");
         };
         directory.update(list->{
             servers=list;
-            if(selectedIndex>=servers.size())selectedIndex=0;
+            selectedIndex=0;
             persist();screen.invalidate();
-            openProbe.run(list,()->screen.invalidate());
-            openVpnResult[0]="OpenVPN: "+list.size()+" free servers updated"+
-                (paidMode?" (paid profile preserved)":"; best advertised ping selected");
+            measureOpenVpn();
+            openVpnResult[0]="OpenVPN: "+list.size()+" free profiles updated"+
+                (paidMode?" (paid profile preserved)":"; TCP reachability test started");
             finished.run();
         }, err->{
             openVpnResult[0]="OpenVPN: update failed; "+servers.size()+" cached. "+err;
@@ -273,7 +328,7 @@ public final class MainActivity extends Activity {
                 " | Telegram proxies: "+hub.entries("PROXY").size();
             List<FeedParser.Entry> measured=hub.entries("V2RAY");
             if(measured.isEmpty()||hubPanel.probe.busy){finished.run();return;}
-            hubPanel.probe.test(measured,finished);
+            hubPanel.probe.test(measured,()->{screen.listCacheAt=0;screen.invalidate();finished.run();});
         });
     }
     void showPaidCredentials(String ovpn){
@@ -302,10 +357,11 @@ public final class MainActivity extends Activity {
     void selectServer(){
         if(servers.isEmpty()){info("No cached free OpenVPN relay. Try embedded V2Ray or refresh the public mirror.");return;}
         String[] items=new String[Math.min(servers.size(),75)];
-        for(int i=0;i<items.length;i++)items[i]=servers.get(i).title();
-        new GlassDialog.Builder(this).setTitle("Free OpenVPN servers")
+        for(int i=0;i<items.length;i++)
+            items[i]=servers.get(i).country+" · "+openProbe.label(servers.get(i))+" · "+servers.get(i).host;
+        new GlassDialog.Builder(this).setTitle("Free OpenVPN · measured latency")
             .setSingleChoiceItems(items,Math.min(selectedIndex,items.length-1),(d,which)->{
-                selectedIndex=which;paidMode=false;preferNative=false;persist();d.dismiss();screen.invalidate();
+                d.dismiss();selectOpenVpnServer(which);
             }).setNegativeButton("Close",null).show();
     }
     private boolean hasNativeCache;
@@ -396,6 +452,7 @@ public final class MainActivity extends Activity {
         }else{
             info("No available configuration. Tap Smart update. Public config counts are not evidence that nodes work.");return;
         }
+        if(!paidMode)openVpnRetries=0;
         vpn.connect(config);screen.invalidate();
     }
     void showSettings(){
@@ -643,13 +700,30 @@ public final class MainActivity extends Activity {
             navbar(c);raw.restore();
         }
         void header(Canvas c){
-            card(c,19,36,46,46,23,0x9bffffff);
+            // Keep the approved reference header: library on left, VPN in center, settings on right.
+            card(c,19,36,46,46,23,0xb6ffffff);
             center(c,"⠿",42,65,22,0xff596670,true);
             center(c,"VPN",W/2,66,19,INK,true);
-            // The approved header keeps just the library affordance; settings live there.
+            card(c,W-65,36,46,46,23,0xb6ffffff);
+            center(c,"⚙",W-42,66,23,0xff596670,true);
         }
         float sliderY(){return H*.409f;}
         float serverY(){return Math.min(Math.max(sliderY()+175,H*.655f),H-250);}
+        String countryFlag(String country){
+            String name=country.toLowerCase(java.util.Locale.ROOT);
+            if(name.contains("united states")||name.equals("usa"))return "🇺🇸";
+            if(name.contains("japan"))return "🇯🇵";
+            if(name.contains("canada"))return "🇨🇦";
+            if(name.contains("germany"))return "🇩🇪";
+            if(name.contains("france"))return "🇫🇷";
+            if(name.contains("singapore"))return "🇸🇬";
+            if(name.contains("united kingdom")||name.equals("uk"))return "🇬🇧";
+            if(name.contains("netherlands"))return "🇳🇱";
+            if(name.contains("australia"))return "🇦🇺";
+            if(name.contains("korea"))return "🇰🇷";
+            if(name.contains("india"))return "🇮🇳";
+            return "🌐";
+        }
         void home(Canvas c){
             float titleY=Math.max(151,H*.198f);
             ink(c,"Private.",27,titleY,36,INK,true);
@@ -688,27 +762,28 @@ public final class MainActivity extends Activity {
             p.setStyle(Paint.Style.STROKE);p.setColor(0xc9ffffff);p.setStrokeWidth(1);c.drawCircle(knobX,cy,38,p);p.setStyle(Paint.Style.FILL);
             if(on)ink(c,"✓",knobX-20,cy+16,51,GREEN,true);
             else drawShield(c,knobX-30,cy-30,60);
-            if(on)ink(c,SingVpnService.verifiedRoute?"Connected":"Tunnel active",x+24,cy+6,20,0xffffffff,true);
+            if(on)ink(c,(vpn.state==VpnController.State.ON||SingVpnService.verifiedRoute)?"Connected":"Tunnel active",x+24,cy+6,20,0xffffffff,true);
             else ink(c,connecting?"Connecting…":"Slide to connect",x+107,cy+6,18,0xffffffff,true);
             if(connecting){
                 p.setStrokeWidth(3);p.setStyle(Paint.Style.STROKE);p.setColor(0xdfffffff);
                 c.drawArc(x-4,sy-4,x+sw+4,sy+sh+4,phase*360,115,false,p);
                 p.setStyle(Paint.Style.FILL);
             }
-            center(c,on?"Tap center to disconnect immediately":
-                connecting?"Tap center to cancel connection":"Slide or tap the glowing button",
+            center(c,on?(vpn.state==VpnController.State.ON||SingVpnService.verifiedRoute?
+                "✓  Your connection is protected":"Tunnel active · verifying route"):
+                connecting?"Establishing a secure connection":"Slide to connect securely",
                 W/2,sy+sh+32,11.5f,on?0xff288e6e:MUTED,false);
-            // Clear separation between Smart refresh and manual selection.
-            float quickY=sy+sh+39;
-            card(c,24,quickY,(W-56)/2,36,18,0x91ffffff);
-            card(c,W/2+4,quickY,(W-56)/2,36,18,0x91ffffff);
-            center(c,"↻ Smart update",24+(W-56)/4f,quickY+23,12.5f,ORANGE,true);
-            center(c,"☷ Choose server",W*.75f+1,quickY+23,12.5f,INK,true);
+            // Reference image has no extra quick-action cards between the switch and country.
+            // Smart Update and manual selection stay available in Settings and Locations.
             float y=serverY();
             card(c,21,y,W-42,78,25,0xa4ffffff);
             circle(c,61,y+44,26,0xfff2f8fa);
-            if(!paidMode&&preferNative)ink(c,"◈",46,y+55,33,0xff8b67f1,true);
-            else ink(c,"◉",46,y+54,29,0xfff59440,true);
+            if(!paidMode&&preferNative)ink(c,"🌐",41,y+54,31,0xff8b67f1,true);
+            else if(paidMode)ink(c,"🔒",42,y+54,28,0xfff59440,true);
+            else {
+                FreeDirectory.Node countryNode=servers.isEmpty()?null:servers.get(Math.min(selectedIndex,servers.size()-1));
+                ink(c,countryNode==null?"🌐":countryFlag(countryNode.country),41,y+54,31,INK,true);
+            }
             String title;
             String subtitle;
             if(paidMode){title="Private OpenVPN account";subtitle="Purchased .ovpn profile";}
@@ -718,7 +793,7 @@ public final class MainActivity extends Activity {
             }else{
                 FreeDirectory.Node node=servers.isEmpty()?null:servers.get(Math.min(selectedIndex,servers.size()-1));
                 title=node==null?"OpenVPN · no nodes yet":node.country;
-                subtitle=node==null?"Use Smart update to refresh":node.host+" · "+(node.ping>0?node.ping+"ms reported":"No ping reported");
+                subtitle=node==null?"Use Settings to refresh":node.host+" · "+openProbe.label(node);
             }
             ink(c,cut(title,(int)(W-145),16),101,y+35,16,INK,true);
             ink(c,cut(subtitle,(int)(W-147),12),101,y+58,12,MUTED,false);
@@ -854,15 +929,14 @@ public final class MainActivity extends Activity {
         }
         void navbar(Canvas c){
             float y=H-75;
-            card(c,0,y,W,86,27,0xb9ffffff);
-            String[] labels={"Home","Locations","Stats","Backup"};
-            String[] symbols={"⌂","◎","▥","◇"};
-            for(int i=0;i<4;i++){
-                float x=W*(i+.5f)/4;
+            card(c,0,y,W,86,27,0xc9ffffff);
+            String[] labels={"Home","Locations","Stats"};
+            String[] symbols={"⌂","◎","▥"};
+            for(int i=0;i<3;i++){
+                float x=W*(i+.5f)/3;
                 int color=tab==i?ORANGE:MUTED;
                 center(c,symbols[i],x,y+34,27,color,true);
                 center(c,labels[i],x,y+60,12,color,tab==i);
-                if(i==tab){p.setColor(ORANGE);c.drawRoundRect(x-12,y+5,x+12,y+8,2,2,p);}
             }
         }
         @Override public boolean onTouchEvent(MotionEvent e){
@@ -894,8 +968,12 @@ public final class MainActivity extends Activity {
                     else if(x-downX>Math.min(58,W*.19f)||Math.abs(x-downX)<14)startVpn();
                     return true;
                 }
-                if(y>H-82){setTab(Math.min(3,(int)(x/W*4)));return true;}
-                if(y<91){if(x<85)hubPanel.open();return true;}
+                if(y>H-82){setTab(Math.min(2,(int)(x/W*3)));return true;}
+                if(y<91){
+                    if(x<85)hubPanel.open();
+                    else if(x>W-85)showSettings();
+                    return true;
+                }
                 if(tab==3){
                     if(y>=193&&y<309){quickBackup();return true;}
                     if(y>=328&&y<440){
@@ -905,11 +983,7 @@ public final class MainActivity extends Activity {
                     }
                 }
                 if(tab==0){
-                    float quickY=sliderY()+92+39;
-                    if(y>quickY&&y<quickY+42){
-                        if(x<W/2)refreshAll();else hubPanel.open();return true;
-                    }
-                    if(y>serverY()&&y<serverY()+81){hubPanel.open();return true;}
+                    if(y>serverY()&&y<serverY()+81){openVpnLocations();return true;}
                 }else if(tab==1){
                     if(y>178&&y<215){
                         int next=Math.max(0,Math.min(2,(int)((x-21)/((W-46)/3))));
@@ -927,7 +1001,7 @@ public final class MainActivity extends Activity {
                     }
                     if(y>222&&y<271){
                         if(locationMode==0){
-                            if(!openProbe.busy)openProbe.run(servers,()->invalidate());
+                            measureOpenVpn();
                             Toast.makeText(MainActivity.this,"Checking OpenVPN TCP ports…",Toast.LENGTH_SHORT).show();
                         }else refreshAll();
                         return true;
