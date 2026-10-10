@@ -46,7 +46,7 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/app/libs"
           cp libbox.aar "$GITHUB_WORKSPACE/app/libs/libbox.aar"
           unzip -l "$GITHUB_WORKSPACE/app/libs/libbox.aar" | grep 'arm64-v8a/libbox.so'
-      - name: Verify original V5 connection baseline
+      - name: Verify original V5 app preservation
         run: python3 tests/verify_v5_baseline.py
       - name: Test feed parsers
         run: |
@@ -65,5 +65,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="build-${GITHUB_RUN_NUMBER}"
-          cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.14.0-arm64-debug.apk
-          gh release create "$tag" AegisVPN-v0.14.0-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.14.0 · build ${GITHUB_RUN_NUMBER}" --notes "Two modes only: original build-25 native engine and manual V2Ray. Original native engine, discovery, parser, probing, refresh, profile storage, OpenVPN fallback and connection orchestration restored. Glass UI; removed Telegram, backup and stats interfaces. Public nodes require on-device verification." || echo "Release publishing unavailable (GitHub App permissions); APK artifact was successfully uploaded."
+          cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.15.0-arm64-debug.apk
+          gh release create "$tag" AegisVPN-v0.15.0-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.15.0 · build ${GITHUB_RUN_NUMBER}" --notes "Two modes only: original build-25 native engine and manual V2Ray. Original native engine, discovery, parser, probing, refresh, profile storage, OpenVPN fallback and connection orchestration restored. Glass UI; removed Telegram, backup and stats interfaces. Public nodes require on-device verification." || echo "Release publishing unavailable (GitHub App permissions); APK artifact was successfully uploaded."
