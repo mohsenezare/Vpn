@@ -15,21 +15,13 @@ final class FeedParser {
   if(!text.contains("://")&&text.trim().matches("[A-Za-z0-9+/=_\\s-]+")){
    try{text=new String(Base64.getDecoder().decode(text.replaceAll("\\s+","")),java.nio.charset.StandardCharsets.UTF_8);}catch(Exception ignored){}
   }
-  Matcher m=Pattern.compile("(?i)(?:vless|vmess|trojan|ss|hysteria2|hy2)://[^\\s<>\"']{8,8192}|(?:tg://proxy\\?|https://t\\.me/proxy\\?)[^\\s<>\"']{8,4096}").matcher(text);
+  Matcher m=Pattern.compile("(?i)(?:vless|vmess|trojan|ss|hysteria2|hy2)://[^\\s<>\"']{8,8192}").matcher(text);
   while(m.find()&&result.size()<300){
-   String v=m.group();String kind=v.startsWith("tg:")||v.startsWith("https:")?"PROXY":"V2RAY";
-   if(kind.equals("PROXY")&&!(v.contains("server=")&&v.contains("port=")&&v.contains("secret=")))continue;
-   try{if(kind.equals("V2RAY")&&!v.startsWith("vmess://")&&!v.startsWith("ss://")){
+   String v=m.group();
+   try{if(!v.startsWith("vmess://")&&!v.startsWith("ss://")){
     URI u=new URI(v);if(u.getHost()==null||u.getPort()<1||u.getPort()>65535)continue;
    }}catch(Exception e){continue;}
-   result.put(v,new Entry(kind,v,source));
-  }
-  // A document preview contains metadata but not downloadable file bytes.
-  Matcher posts=Pattern.compile("data-post=\"([A-Za-z0-9_]+/[0-9]+)\"([\\s\\S]*?)(?=data-post=\"|\\z)").matcher(body);
-  while(posts.find()&&result.size()<350){
-   if(Pattern.compile("(?i)\\.npv[st4]?").matcher(posts.group(2)).find()){
-    String link="https://t.me/"+posts.group(1);result.put(link,new Entry("NAPSTERNETV",link,source));
-   }
+   result.put(v,new Entry("V2RAY",v,source));
   }
   return new ArrayList<>(result.values());
  }

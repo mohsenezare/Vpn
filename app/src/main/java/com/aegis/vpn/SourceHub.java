@@ -7,7 +7,6 @@ import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
 final class SourceHub {
- static final String[] CHANNELS={"net_azad","proxyplus","irovpn","mtproto021","netmeli_ir","npv_iran","proxy_netmeli","onevpn","iproxy2","myconfig","miticonfig","proxyrp","mitivpn"};
  final Context context;
  final Handler main=new Handler(Looper.getMainLooper());
  volatile boolean busy;
@@ -22,7 +21,6 @@ final class SourceHub {
   s.add("https://raw.githubusercontent.com/Au1rxx/free-vpn-subscriptions/main/output/v2ray-base64.txt");
   // Preserve the v0.5 original fallback, without treating it as verified.
   s.add("https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/Eternity.txt");
-  s.add("https://t.me/s/mitivpn");
   return s;
  }
  static String get(String address)throws Exception{
@@ -63,26 +61,9 @@ final class SourceHub {
   List<Callable<Void>> jobs=new ArrayList<>();
   for(String s:sources())jobs.add(()->{
    try{
-    List<FeedParser.Entry> entries;
     long retrievedAt=System.currentTimeMillis();
-    try{
-     String body=get(s);
-     if(s.startsWith("https://t.me/s/")&&!java.util.regex.Pattern.compile("data-post=\""+java.util.regex.Pattern.quote(s.substring(s.lastIndexOf('/')+1))+"/[0-9]+\"",java.util.regex.Pattern.CASE_INSENSITIVE).matcher(body).find())throw new IOException("Preview does not match requested channel");
-     entries=FeedParser.parse(body,s);
-     if(entries.isEmpty())throw new IOException("No supported configs in public preview");
-    }catch(Exception directError){
-     if(!s.startsWith("https://t.me/s/"))throw directError;
-     JSONObject mirror=new JSONObject(get("https://raw.githubusercontent.com/mohsenezare/Vpn/main/feeds/"+s.substring(s.lastIndexOf('/')+1)+".json"));
-     retrievedAt=mirror.getLong("updated");
-     if(System.currentTimeMillis()-retrievedAt>259200000L)throw new IOException("Public mirror is older than 72 hours");
-     JSONArray data=mirror.getJSONArray("entries");entries=new ArrayList<>();
-     for(int i=0;i<Math.min(350,data.length());i++){
-      JSONObject o=data.getJSONObject(i);String kind=o.getString("k"),v=o.getString("v");
-      if(kind.equals("NAPSTERNETV")&&v.matches("https://t\\.me/[A-Za-z0-9_]+/[0-9]+"))entries.add(new FeedParser.Entry(kind,v,s));
-      else entries.addAll(FeedParser.parse(v,s));
-     }
-     if(entries.isEmpty())throw new IOException("No valid configs in public mirror");
-    }
+    List<FeedParser.Entry> entries=FeedParser.parse(get(s),s);
+    if(entries.isEmpty())throw new IOException("No V2Ray configs in public feed");
     JSONArray a=new JSONArray();
     for(FeedParser.Entry e:entries){JSONObject o=new JSONObject();o.put("k",e.kind);o.put("v",e.value);a.put(o);}
     context.getSharedPreferences("hub",0).edit().putString(s,a.toString()).putLong(s+"time",retrievedAt).putString(s+"error","").apply();
@@ -106,7 +87,7 @@ final class SourceHub {
   for(String s:sources()){
    long t=context.getSharedPreferences("hub",0).getLong(s+"time",0);
    String e=context.getSharedPreferences("hub",0).getString(s+"error","");
-   b.append(s.replace("https://t.me/s/","@")).append("\n").append(t==0?"No successful update":android.text.format.DateFormat.format("MM-dd HH:mm",t)).append(e.isEmpty()?"":" · "+e).append("\n\n");
+   b.append(s).append("\n").append(t==0?"No successful update":android.text.format.DateFormat.format("MM-dd HH:mm",t)).append(e.isEmpty()?"":" · "+e).append("\n\n");
   }return b.toString();
  }
 }

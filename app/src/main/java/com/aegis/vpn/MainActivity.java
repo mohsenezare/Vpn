@@ -135,9 +135,7 @@ public final class MainActivity extends Activity {
         });
         hub.refresh(()->{
             nativeCacheAt=0;nativeCountAt=0;
-            sourceResult[0]="V2Ray: "+hub.entries("V2RAY").size()+
-                " | Proxies: "+hub.entries("PROXY").size()+
-                " | NapsternetV: "+hub.entries("NAPSTERNETV").size();
+            sourceResult[0]="V2Ray: "+hub.entries("V2RAY").size();
             List<FeedParser.Entry> measured=hub.entries("V2RAY");
             if(measured.isEmpty()||hubPanel.probe.busy){finished.run();return;}
             hubPanel.probe.test(measured,finished);
@@ -225,6 +223,15 @@ public final class MainActivity extends Activity {
             }
         },200);
     }
+    void selectConnectionMode(boolean v2ray){
+        if(isTunnelOn()||isConnecting()){
+            info("Disconnect before switching VPN mode.");return;
+        }
+        if(v2ray){useSmartNative();return;}
+        if(!preferNative&&!paidMode)return;
+        paidMode=false;preferNative=false;persist();screen.invalidate();
+        Toast.makeText(this,"Free OpenVPN mode selected",Toast.LENGTH_SHORT).show();
+    }
     void useSmartNative(){
         profiles.clearNative();
         pinnedNative=false;paidMode=false;preferNative=true;persist();
@@ -255,7 +262,10 @@ public final class MainActivity extends Activity {
             try{config=profiles.getOpenVpnConfig();}
             catch(Exception e){info("Could not decrypt paid profile.");return;}
             if(config==null){info("Import your paid .ovpn file first.");return;}
-        }else if(preferNative&&(pinnedNative||hasNativeCandidates())){
+        }else if(preferNative){
+            if(!pinnedNative&&!hasNativeCandidates()){
+                info("No V2Ray configs cached. Tap Smart update to refresh.");return;
+            }
             if(pinnedNative){
                 try{
                     String pinned=profiles.getNative();
@@ -280,8 +290,6 @@ public final class MainActivity extends Activity {
             return;
         }else if(!servers.isEmpty()){
             config=servers.get(Math.min(selectedIndex,servers.size()-1)).config;
-        }else if(hasNativeCandidates()){
-            preferNative=true;persist();startVpn();return;
         }else{
             info("No available configuration. Tap Smart update. Public config counts are not evidence that nodes work.");return;
         }
@@ -292,7 +300,7 @@ public final class MainActivity extends Activity {
             "Refresh free OpenVPN servers","Choose free OpenVPN server",
             "Import paid .ovpn account","Use purchased OpenVPN account",
             "Use free VPN Gate servers","Delete saved paid account",
-            "About / security","V2Ray · Proxies · NapsternetV","Use embedded V2Ray VPN",
+            "About / security","V2Ray configuration library","Use embedded V2Ray VPN",
             "Choose V2Ray server manually","Use Smart V2Ray selection"};
         new GlassDialog.Builder(this).setTitle("VPN Settings").setItems(actions,(dlg,which)->{
             if(which==8)hubPanel.open();
@@ -427,6 +435,13 @@ public final class MainActivity extends Activity {
             p.setStyle(Paint.Style.STROKE);p.setColor(active==GREEN?0x2393edc5:0x28ffb978);
             p.setStrokeWidth(1);c.drawCircle(W/2,sy+45,98,p);c.drawCircle(W/2,sy+45,112,p);
             p.setStyle(Paint.Style.FILL);
+            // Dedicated mode selector above the unchanged connection slider.
+            boolean v2Selected=preferNative&&!paidMode;
+            float modeW=(W-58)/2;
+            card(c,24,sy-58,modeW,44,19,v2Selected?0xe2e4fff2:0xcaffffff,v2Selected?0xff6dd4aa:0xffffffff);
+            card(c,34+modeW,sy-58,modeW,44,19,!v2Selected?0xe2e4fff2:0xcaffffff,!v2Selected?0xff6dd4aa:0xffffffff);
+            center(c,pinnedNative?"V2Ray · Manual":"V2Ray · Smart",24+modeW/2,sy-31,14,v2Selected?0xff13875a:INK,true);
+            center(c,"OpenVPN",34+modeW+modeW/2,sy-31,14,!v2Selected?0xff13875a:INK,true);
             card(c,x-2,sy-3,sw+4,sh+6,52,0x90ffffff,0x99ffffff);
             gradient(c,x,sy,sw,sh,48,
                 isTunnelOn()?0xff00c77d: isConnecting()?0xffffac53:0xffffab43,
@@ -453,20 +468,20 @@ public final class MainActivity extends Activity {
             txt(c,paidMode?"★":"🌐",47,cy+54,27,ORANGE,true);
             String name=paidMode?"Private OpenVPN account":
                 preferNative&&pinnedNative?"V2Ray · manually selected":
-                preferNative&&hasNativeCandidates()?"Embedded VPN · V2Ray":
+                preferNative?"Embedded VPN · V2Ray":
                 (servers.isEmpty()?"No free OpenVPN relay":servers.get(Math.min(selectedIndex,servers.size()-1)).country);
             String subtitle=paidMode?"Imported .ovpn profile":
                 preferNative&&pinnedNative?"Pinned server · tap library to change":
-                preferNative&&hasNativeCandidates()?(nativeConfigCount()+" config candidates · not validated"):
+                preferNative?(hasNativeCandidates()?nativeConfigCount()+" config candidates · not validated":"No V2Ray configs · Smart update"):
                 (servers.isEmpty()?"Tap Smart update to refresh":servers.get(Math.min(selectedIndex,servers.size()-1)).host);
             txt(c,name,98,cy+38,15,INK,true);
             txt(c,subtitle.length()>32?subtitle.substring(0,31)+"…":subtitle,98,cy+61,11,MUTED,false);
             txt(c,"›",W-49,cy+56,30,MUTED,false);
             card(c,18,cy+98,W-36,62,20,0xeaffffff,0xffffffff);
             txt(c,updatingAll?"↻ Updating all sources…":"↻ Smart update · select best",35,cy+126,16,ORANGE,true);
-            txt(c,"OpenVPN + V2Ray + Telegram + NapsternetV",35,cy+146,11,MUTED,false);
+            txt(c,"OpenVPN + V2Ray",35,cy+146,11,MUTED,false);
             card(c,18,cy+168,W-36,42,18,0xcfffffff,0xffffffff);
-            center(c,"V2Ray  ·  Telegram Proxy  ·  NapsternetV  ›",W/2,cy+195,12,INK,true);
+            center(c,"V2Ray  ·  Server library  ›",W/2,cy+195,12,INK,true);
         }
         void locations(Canvas c){
             header(c);txt(c,"Locations",24,140,32,INK,true);
@@ -528,6 +543,9 @@ public final class MainActivity extends Activity {
                 }
                 if(y>H-85){changeTab(Math.min(2,(int)(x/W*3)));return true;}
                 if(y<85){if(x>W-85)showSettings();else if(x<85)hubPanel.open();return true;}
+                if(tab==0&&y>=sy-58&&y<=sy-14&&x>=24&&x<=W-24){
+                    selectConnectionMode(x<W/2);return true;
+                }
                 if(tab==0&&y>serverY()+168&&y<serverY()+210){hubPanel.open();return true;}
                 if(tab==0&&y>serverY()+98&&y<serverY()+160){refreshAll();return true;}
                 if(tab==0&&y>serverY()&&y<serverY()+88){if(preferNative&&!paidMode)hubPanel.list("V2RAY");else selectServer();return true;}

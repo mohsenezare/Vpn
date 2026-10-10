@@ -57,3 +57,9 @@ Public Telegram links/file-post references are also mirrored by GitHub Actions e
 - The APK is not yet production verified: **CI compilation and real-device network tests are separate requirements**. Until an Android device has successfully connected through the tunnel, this remains an experimental build.
 - Only `arm64-v8a` devices are supported by the new native artifact; other ABIs need dedicated builds.
 - GPL-3.0 notice: sing-box is copyrighted by its upstream authors and licensed under GPL-3.0-or-later; the source tree and build process are available publicly for review. See the upstream [sing-box LICENSE](https://github.com/SagerNet/sing-box/blob/v1.12.22/LICENSE).
+
+## 0.5.2 minimal change
+
+- Adds V2Ray Smart/OpenVPN mode selection on the Home screen immediately above the existing connection slider. Mode is strictly obeyed; missing servers do not cause a silent protocol switch.
+- Removes Telegram proxies and NapsternetV from the app, parser, source fetcher and mirrored feeds. Keeps free and paid OpenVPN support plus V2Ray.
+- Leaves the 0.5 Home slider, layout, glass cards, animations, stats and remaining features intact.
