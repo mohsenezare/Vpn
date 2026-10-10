@@ -119,7 +119,7 @@ public final class MainActivity extends Activity {
             if(outstanding[0]!=0)return;
             updatingAll=false;screen.invalidate();
             info("Update complete.\n"+openVpnResult[0]+"\n"+sourceResult[0]+
-                "\nSelection uses directory-reported ping, not a verified VPN connection.");
+                "\nOpenVPN selection uses publisher throughput/uptime plus a relay quality score, not a VPN handshake. V2Ray tests are measured separately.");
         };
         directory.update(list->{
             servers=list;
@@ -127,7 +127,7 @@ public final class MainActivity extends Activity {
             else if(selectedIndex>=servers.size())selectedIndex=0;
             persist();screen.invalidate();
             openVpnResult[0]="OpenVPN: "+list.size()+" free servers updated"+
-                (paidMode?" (paid profile preserved)":"; best advertised ping selected");
+                (paidMode?" (paid profile preserved)":"; best publisher-ranked relay selected (not a connectivity test)");
             finished.run();
         }, err->{
             openVpnResult[0]="OpenVPN: update failed; "+servers.size()+" cached. "+err;
@@ -304,7 +304,7 @@ public final class MainActivity extends Activity {
             if(which==7)info("Connection requires the separate free 'OpenVPN for Android' app (de.blinkt.openvpn).\n"+
               "Free VPN Gate volunteer relays can monitor traffic metadata and disconnect unexpectedly.\n"+
               "Updates refer to the server directory, not APK updates.\n"+
-              "VLESS, Hysteria 2 and AmneziaWG engines are not bundled yet.");
+              "VLESS and Hysteria 2 use the embedded engine where supported. AmneziaWG is not included.");
         }).show();
     }
     private class Screen extends View {
