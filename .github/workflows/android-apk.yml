@@ -88,4 +88,5 @@ jobs:
             adb shell pm grant com.aegis.vpn android.permission.POST_NOTIFICATIONS
             adb shell am instrument -w com.aegis.vpn.test/com.aegis.vpn.ProbeSmokeInstrumentation > /tmp/probe-smoke.txt
             cat /tmp/probe-smoke.txt
+            adb logcat -d -s AndroidRuntime GoLog libc System.err
             grep -q 'PROBE_SMOKE_PASSED' /tmp/probe-smoke.txt
