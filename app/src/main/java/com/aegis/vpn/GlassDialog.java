@@ -5,41 +5,20 @@ import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.view.*;
-import android.view.animation.*;
-
-/** Lightweight translucent iOS-style cards with coordinated fade/slide/scale spring. */
 final class GlassDialog {
  static class Builder extends AlertDialog.Builder {
   Builder(Context c){super(c);}
   @Override public AlertDialog show(){
-   final AlertDialog d=super.show();
-   final Window w=d.getWindow();
+   AlertDialog d=super.show();Window w=d.getWindow();
    if(w!=null){
-    float scale=getContext().getResources().getDisplayMetrics().density;
-    GradientDrawable background=new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-      new int[]{0xd6fffcf8,0xa0ffffff,0xbdfafff9});
-    background.setCornerRadius(scale*31);
-    background.setStroke(Math.max(1,(int)scale),0xdfffffff);
-    w.setBackgroundDrawable(background);
-    w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-    WindowManager.LayoutParams params=w.getAttributes();
-    params.dimAmount=.30f;w.setAttributes(params);
-    // Native blur is only active when a dialog is visible on Android 12+.
-     if(Build.VERSION.SDK_INT>=31)w.setBackgroundBlurRadius((int)(scale*22));
-    w.setLayout((int)(getContext().getResources().getDisplayMetrics().widthPixels*.90f),
-        WindowManager.LayoutParams.WRAP_CONTENT);
-    View root=w.getDecorView();
-    root.setElevation(scale*19);
-    root.setAlpha(0);
-    root.setScaleX(.94f);root.setScaleY(.94f);
-    root.setTranslationY(scale*25);
-    root.animate().cancel();
-    root.animate().alpha(1).scaleX(1).scaleY(1).translationY(0)
-      .setDuration(290)
-      .setInterpolator(new PathInterpolator(.18f,.8f,.22f,1f)).start();
-    d.setOnDismissListener(dialog->{root.animate().cancel();});
-   }
-   return d;
+    float density=getContext().getResources().getDisplayMetrics().density;
+    GradientDrawable bg=new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{0x80fefbf6,0x55ffffff,0x70effaf5});
+    bg.setCornerRadius(30*density);bg.setStroke((int)density,Color.WHITE);
+    w.setBackgroundDrawable(bg);w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);w.setDimAmount(.24f);
+    if(Build.VERSION.SDK_INT>=31){w.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND);w.getAttributes().setBlurBehindRadius((int)(24*density));w.setAttributes(w.getAttributes());w.setBackgroundBlurRadius((int)(32*density));}
+    w.setLayout((int)(getContext().getResources().getDisplayMetrics().widthPixels*.91f),WindowManager.LayoutParams.WRAP_CONTENT);
+    View v=w.getDecorView();v.setElevation(20*density);v.setAlpha(0);v.setScaleX(.94f);v.setScaleY(.94f);v.setTranslationY(28*density);v.animate().alpha(1).scaleX(1).scaleY(1).translationY(0).setDuration(480).setInterpolator(t->t>=1?1f:(float)(1-(1+10*t)*Math.exp(-10*t))).start();
+   }return d;
   }
  }
 }

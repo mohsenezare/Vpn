@@ -1,0 +1,19 @@
+from pathlib import Path
+import hashlib
+root=Path(__file__).resolve().parents[1]
+FILES={'app/src/main/AndroidManifest.xml': '5edf00a617da2dad0b8637860c37635d0bfda2306c3b41b3d420e2a5c2bcf1d5', 'app/src/main/aidl/de/blinkt/openvpn/api/APIVpnProfile.aidl': 'c6681cfc55fc3a556369bb04fee40d5fbf954335f56cf0f300d241e3a9fc578a', 'app/src/main/aidl/de/blinkt/openvpn/api/IOpenVPNAPIService.aidl': 'e32841954865b9c35c6ebe9971b3e261f44b3de12f57b7c74f5834b4a84fb3b0', 'app/src/main/aidl/de/blinkt/openvpn/api/IOpenVPNStatusCallback.aidl': '1e87238d71daba8795db96f9466fb5b24bf1a74e773e42aef7e7679c4797d209', 'app/src/main/java/com/aegis/vpn/EndpointProbe.java': '9633cc2b189de2e9109697901830f3689ec64638533a9eafbf7720ca9997634e', 'app/src/main/java/com/aegis/vpn/FeedParser.java': 'e9bb627762c902c3a435587f5595fe776ecf8780f6d85da25aa965a2fffcf173', 'app/src/main/java/com/aegis/vpn/FreeDirectory.java': 'df1f55f4b5589cc8ee4444df40d7c1c1078f481703409e80945ba5b0e41b5b65', 'app/src/main/java/com/aegis/vpn/HubPanel.java': '5114988becddea6fa143473bba8125c581c133b9130cd85c67ecd1f3812545ae', 'app/src/main/java/com/aegis/vpn/ProfileStore.java': 'bac0f3895b095a4c6b56def623370863822d3ebd64e29f87920a0d9298e0dd85', 'app/src/main/java/com/aegis/vpn/RefreshJob.java': '9ae8ad55edc9915b9e99c1897aa945411224325665172d65fbc8788892b28c0d', 'app/src/main/java/com/aegis/vpn/SingBoxConfig.java': 'bca78aa874b2994a7d3e171da1c4b3d6cbd26fa4eb8ef7eca8e58fd66f5f1869', 'app/src/main/java/com/aegis/vpn/SingBoxPlatform.java': '160a9cb1e8dede9c278345a61276d96a2e3b64ebaa4ee68f2d0489f3bd906a8c', 'app/src/main/java/com/aegis/vpn/SingVpnService.java': '7a98090e9f97054e7004f87d382bae6142597ddbcbd133d1008b6d9eb3603f02', 'app/src/main/java/com/aegis/vpn/SourceHub.java': 'b15fcf3b7dec085060f06e6b60ea17d6b855f63dd38718f2b58662f08fa8a005', 'app/src/main/java/com/aegis/vpn/VpnController.java': '1576f2c5c042fd3454ce73a3979aa135242883fcc1e94db60ffc67e8a2ebbc20', 'app/src/main/java/de/blinkt/openvpn/api/APIVpnProfile.java': '777bf423fd1f10a55d348eab17524463473064d36151bebfa983fd303553de5d', 'app/src/main/res/drawable-nodpi/app_icon.png': '2c273a3762cded5eae44b83312b686aade4d91d9feb2198448e1502ba66a2b83'}
+LAYOUTS={'void home(Canvas c,int active)': 'b91372d63ed946c2b5e179c77b33acdd9d384816ae0e170ec9c0126ea2eab59d', 'void locations(Canvas c)': '8e9791d88aceee70a2d976ef01092f13963d0cd569473ff1c7f553d3dfe3af4a', 'void stats(Canvas c)': 'b88a8469e4f713e91de4a865662faa50a9a8f70645148a2b3387327f9b3f1b32', 'void navbar(Canvas c)': '07f8699a44c4a29a22beb2aadb1a422bfcee036bdc6b5af7dbfedf4cb1343566', 'void header(Canvas c)': '5973607d88061211f2dd351fa1e0102e37f291f3d183875a728a96943fa46cca', 'float sliderY()': '3838dce10185ab09de38d8f9ce502d2ae55aaacf156bb53abe166c369f93b7a8', 'float serverY()': 'e549f4ed0ee35673a4aed0e19c6d9006848b2d38a74ab6e6989df02a81f99aec'}
+MAIN_PREFIX='6fa59f40b9cdfed5d9bd9b3baf2ac15e6081ec24e99e757dee94ba09dac17066'
+for name,digest in FILES.items():
+    assert hashlib.sha256((root/name).read_bytes()).hexdigest()==digest, 'V5 file changed: '+name
+source=(root/'app/src/main/java/com/aegis/vpn/MainActivity.java').read_text()
+prefix=source.split('    private class Screen extends View {')[0].replace(', "Choose V2Ray server"','').replace('            if(which==10)hubPanel.list("V2RAY");\n','')
+assert hashlib.sha256(prefix.encode()).hexdigest()==MAIN_PREFIX, 'Original V5 non-visual Activity code changed'
+for signature,digest in LAYOUTS.items():
+    start=source.index('        '+signature);k=source.index('{',start)+1;depth=1
+    while depth:
+        if source[k]=='{':depth+=1
+        if source[k]=='}':depth-=1
+        k+=1
+    assert hashlib.sha256(source[start:k].encode()).hexdigest()==digest, 'V5 layout changed: '+signature
+print('Original V5 app files, connection logic, and all 7 layout methods preserved')
