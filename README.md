@@ -70,3 +70,11 @@ Public Telegram links/file-post references are also mirrored by GitHub Actions e
 - Adds a compact Download / Upload strip in the existing Home screen gap, and replaces the Stats placeholder numbers with current measured rates.
 - Rates are derived from **Android TrafficStats device-wide receive/transmit counters, sampled every second while the VPN tunnel is active**. These are real device totals, *not per-VPN counters*; they may include background app traffic and tunnel overhead, and may overcount traffic. Displayed as 0.00 Mbps while disconnected, and unavailable when Android does not expose counters. These numbers must not be represented as an isolated VPN speed test.
 - Existing V2Ray and OpenVPN engines and selection logic are unchanged.
+
+## 0.5.4 notification drawer and Quick Settings shortcuts (locked v0.5 UI)
+
+- Registers a native Android Quick Settings tile labelled **Aegis VPN**, surfaced in phone's Quick Settings editing Add-card collection. Tapping toggles the currently selected VPN mode via the existing MainActivity (including VPN permission prompts); no new tunnel engine.
+- Adds a Settings option to **request tile addition** on Android 13+ (`StatusBarManager.requestAddTileService`), and instructions for manual addition if the OEM disables the request. Android requires user approval; the tile cannot be silently pinned.
+- Adds a low-priority Aegis status notification with a Connect/Disconnect action. Asks for `POST_NOTIFICATIONS` once on Android 13+. Permission denial or device notification settings can suppress the drawer entry. Native sing-box retains its *existing required foreground notification* instead of showing duplicates. OpenVPN's separate client remains in charge of its tunnel.
+- Uses a matching monochrome shield icon for the tile and native service notification. Tile active status is based on currently-observed app VPN state; if the external OpenVPN service outlives the Aegis process its last state may not be visible until Aegis is opened again.
+- All Home, Stats, animations, glass, speed meters and existing connection logic remain unchanged.

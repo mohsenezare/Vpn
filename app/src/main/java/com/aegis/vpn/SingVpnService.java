@@ -79,7 +79,7 @@ public final class SingVpnService extends VpnService {
         return new android.app.Notification.Builder(this,CHANNEL)
             .setContentTitle("Aegis VPN")
             .setContentText(status)
-            .setSmallIcon(android.R.drawable.ic_lock_lock)
+            .setSmallIcon(R.drawable.ic_aegis_status)
             .setOngoing(true)
             .setContentIntent(content)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel,"Disconnect",action)
@@ -89,6 +89,7 @@ public final class SingVpnService extends VpnService {
         ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).notify(91,notification(msg));
     }
     private void broadcast(){
+        AegisShortcuts.nativeStatusChanged(this,state);
         Intent i=new Intent(ACTION_STATUS).setPackage(getPackageName());
         i.putExtra("state",state);i.putExtra("message",lastError);
         sendBroadcast(i);

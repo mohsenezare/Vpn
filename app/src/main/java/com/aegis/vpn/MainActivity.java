@@ -33,6 +33,7 @@ public final class MainActivity extends Activity {
     private final BroadcastReceiver nativeEvents=new BroadcastReceiver(){
         @Override public void onReceive(Context context,Intent intent){
             if(screen!=null)screen.invalidate();
+            AegisShortcuts.publish(this,isTunnelOn(),isConnecting());
             if(intent.getIntExtra("state",0)==SingVpnService.FAILED)
                 info("Embedded VPN error: "+intent.getStringExtra("message"));
         }
@@ -63,7 +64,10 @@ public final class MainActivity extends Activity {
         paidMode=getPreferences(MODE_PRIVATE).getBoolean("paid_mode",false);
         preferNative=getPreferences(MODE_PRIVATE).getBoolean("prefer_native",true);
         selectedIndex=getPreferences(MODE_PRIVATE).getInt("selected",0);
-        vpn=new VpnController(this, () -> screen.invalidate(), msg -> {
+        vpn=new VpnController(this, () -> {
+            screen.invalidate();
+            AegisShortcuts.publish(this,isTunnelOn(),isConnecting());
+        }, msg -> {
             new GlassDialog.Builder(this).setTitle("OpenVPN").setMessage(msg).setPositiveButton("OK",null).show();
             screen.invalidate();
         });
@@ -77,6 +81,31 @@ public final class MainActivity extends Activity {
         RefreshJob.schedule(this);
         if(hub.stale())hub.refresh(()->screen.invalidate());
         if(directory.isStale()) refresh(false);
+        AegisShortcuts.publish(this,isTunnelOn(),isConnecting());
+        handler.post(()->{
+            AegisShortcuts.maybeAskNotificationPermission(this);
+            handleQuickAction(getIntent());
+        });
+    }
+    @Override protected void onNewIntent(Intent intent){
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handler.post(()->handleQuickAction(intent));
+    }
+    private void handleQuickAction(Intent intent){
+        if(intent==null||!AegisShortcuts.ACTION_TOGGLE.equals(intent.getAction()))return;
+        intent.setAction(Intent.ACTION_MAIN); // no duplicate toggle on activity recreation
+        if(isTunnelOn()){
+            if(SingVpnService.state==SingVpnService.TUNNEL_ACTIVE)stopNative();
+            if(vpn.state==VpnController.State.ON)vpn.disconnect();
+        }else if(!isConnecting()){
+            startVpn();
+        }
+        AegisShortcuts.publish(this,isTunnelOn(),isConnecting());
+    }
+    @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] results){
+        super.onRequestPermissionsResult(code,permissions,results);
+        AegisShortcuts.publish(this,isTunnelOn(),isConnecting());
     }
     @Override protected void onDestroy(){
         try{unregisterReceiver(nativeEvents);}catch(Exception ignored){}
@@ -312,12 +341,15 @@ public final class MainActivity extends Activity {
             "Import paid .ovpn account","Use purchased OpenVPN account",
             "Use free VPN Gate servers","Delete saved paid account",
             "About / security","V2Ray configuration library","Use embedded V2Ray VPN",
-            "Choose V2Ray server manually","Use Smart V2Ray selection"};
+            "Choose V2Ray server manually","Use Smart V2Ray selection",
+            "Add Aegis to Quick Settings","Enable VPN status notification"};
         new GlassDialog.Builder(this).setTitle("VPN Settings").setItems(actions,(dlg,which)->{
             if(which==8)hubPanel.open();
             if(which==9){paidMode=false;preferNative=true;persist();screen.invalidate();}
             if(which==10)hubPanel.list("V2RAY");
             if(which==11)useSmartNative();
+            if(which==12)AegisShortcuts.addQuickTile(this);
+            if(which==13){AegisShortcuts.enableNotifications(this);AegisShortcuts.publish(this,isTunnelOn(),isConnecting());}
             if(which==0)refreshAll();
             if(which==1)refresh(true);
             if(which==2)selectServer();
