@@ -65,5 +65,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="build-${GITHUB_RUN_NUMBER}"
-          cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.15.0-arm64-debug.apk
-          gh release create "$tag" AegisVPN-v0.15.0-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.15.0 · build ${GITHUB_RUN_NUMBER}" --notes "Two modes only: original build-25 native engine and manual V2Ray. Original native engine, discovery, parser, probing, refresh, profile storage, OpenVPN fallback and connection orchestration restored. Glass UI; removed Telegram, backup and stats interfaces. Public nodes require on-device verification." || echo "Release publishing unavailable (GitHub App permissions); APK artifact was successfully uploaded."
+          cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.16.0-arm64-debug.apk
+          gh release create "$tag" AegisVPN-v0.16.0-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.16.0 · build ${GITHUB_RUN_NUMBER}" --notes "Two modes only: original build-25 native engine and manual V2Ray. Original native engine, discovery, parser, probing, refresh, profile storage, OpenVPN fallback and connection orchestration restored. Glass UI; removed Telegram, backup and stats interfaces. Public nodes require on-device verification." || echo "Release publishing unavailable (GitHub App permissions); APK artifact was successfully uploaded."

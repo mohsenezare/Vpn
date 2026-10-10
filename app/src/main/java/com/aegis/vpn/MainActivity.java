@@ -283,28 +283,56 @@ public final class MainActivity extends Activity {
         RadialGradient ambientGlow,lowerGlow;
         float backdropW=-1,backdropH=-1,tabReveal=1;
         boolean backdropActive;
-        android.animation.ValueAnimator settle,tabMotion;
+        android.animation.ValueAnimator settle,tabMotion,pressMotion;
+        android.graphics.RenderNode liveGlass;
+        float pressAmount=0,pressX=-1,pressY=-1;
+        final RectF fullBackdrop=new RectF();
+        final android.animation.TimeInterpolator spring=t->{
+            if(t>=1)return 1f;
+            return (float)(1-(1+10*t)*Math.exp(-10*t));
+        };
 
         Screen(){
             super(MainActivity.this);
             icon=BitmapFactory.decodeResource(getResources(),R.drawable.app_icon);
             density=getResources().getDisplayMetrics().density;
-            motion.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());motion.setDuration(5200);motion.setRepeatCount(android.animation.ValueAnimator.INFINITE);motion.setRepeatMode(android.animation.ValueAnimator.REVERSE);motion.addUpdateListener(a->{phase=(float)a.getAnimatedValue();invalidate();});
+            motion.setInterpolator(new android.view.animation.LinearInterpolator());motion.setDuration(9000);motion.setRepeatCount(android.animation.ValueAnimator.INFINITE);motion.setRepeatMode(android.animation.ValueAnimator.RESTART);motion.addUpdateListener(a->{phase=(float)(.5-.5*Math.cos(2*Math.PI*(float)a.getAnimatedValue()));invalidate();});
         }
         @Override protected void onAttachedToWindow(){super.onAttachedToWindow();motion.start();}
-        @Override protected void onDetachedFromWindow(){motion.cancel();if(settle!=null)settle.cancel();if(tabMotion!=null)tabMotion.cancel();super.onDetachedFromWindow();}
+        @Override protected void onDetachedFromWindow(){motion.cancel();if(settle!=null)settle.cancel();if(tabMotion!=null)tabMotion.cancel();if(pressMotion!=null)pressMotion.cancel();super.onDetachedFromWindow();}
         @Override protected void onWindowVisibilityChanged(int visibility){super.onWindowVisibilityChanged(visibility);if(motion!=null){if(visibility==VISIBLE)motion.resume();else motion.pause();}}
         void fill(Canvas c,int color){c.drawColor(color);}
         void card(Canvas c,float x,float y,float w,float h,float r,int bg,int border){
             p.reset();p.setAntiAlias(true);p.setFilterBitmap(true);
             glassRect.set(x,y,x+w,y+h);glassPath.reset();glassPath.addRoundRect(glassRect,r,r,Path.Direction.CW);
             c.save();c.clipPath(glassPath);
-            if(glassBackdrop!=null){p.setColor(Color.WHITE);c.drawBitmap(glassBackdrop,null,new RectF(0,0,W,H),p);}
-            p.setColor(0x52ffffff);c.drawRect(glassRect,p);
+            if(Build.VERSION.SDK_INT>=31&&c.isHardwareAccelerated()&&liveGlass!=null){
+                c.drawRenderNode(liveGlass);
+            }else if(glassBackdrop!=null){p.setColor(Color.WHITE);fullBackdrop.set(0,0,W,H);c.drawBitmap(glassBackdrop,null,fullBackdrop,p);}
+            p.setColor(0x26ffffff);c.drawRect(glassRect,p);
+            if(glassRect.contains(pressX,pressY)&&pressAmount>0){p.setColor(((int)(pressAmount*36)<<24)|0xffffff);c.drawRect(glassRect,p);}
+
             c.restore();
             p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(1);
             p.setColor(0xdfffffff);c.drawRoundRect(x+.5f,y+.5f,x+w-.5f,y+h-.5f,r,r,p);
+            p.setColor(0x120e2530);p.setStrokeWidth(.6f);
+            c.drawRoundRect(x+1.5f,y+1.5f,x+w-1.5f,y+h-1.5f,r-1,r-1,p);
             p.setStyle(Paint.Style.FILL);
+        }
+        void recordLiveGlass(Canvas target){
+            if(Build.VERSION.SDK_INT<31||!target.isHardwareAccelerated())return;
+            if(liveGlass==null){
+                liveGlass=new android.graphics.RenderNode("V5 live frosted backdrop");
+                liveGlass.setRenderEffect(android.graphics.RenderEffect.createBlurEffect(16,16,Shader.TileMode.CLAMP));
+            }
+            liveGlass.setPosition(0,0,(int)Math.ceil(W),(int)Math.ceil(H));
+            Canvas recording=liveGlass.beginRecording();drawBackdrop(recording);liveGlass.endRecording();
+        }
+        void press(float amount){
+            if(pressMotion!=null)pressMotion.cancel();
+            pressMotion=android.animation.ValueAnimator.ofFloat(pressAmount,amount);
+            pressMotion.setDuration(amount>0?120:380);pressMotion.setInterpolator(spring);
+            pressMotion.addUpdateListener(v->{pressAmount=(float)v.getAnimatedValue();invalidate();});pressMotion.start();
         }
         void ensureBackdrop(){
             boolean active=isTunnelOn();
@@ -334,17 +362,18 @@ public final class MainActivity extends Activity {
         void springBack(){
             if(settle!=null)settle.cancel();
             settle=android.animation.ValueAnimator.ofFloat(dragOffset,0);
-            settle.setDuration(330);settle.setInterpolator(new android.view.animation.PathInterpolator(.16f,1f,.3f,1f));
+            settle.setDuration(460);settle.setInterpolator(spring);
             settle.addUpdateListener(v->{dragOffset=(float)v.getAnimatedValue();invalidate();});settle.start();
         }
         void animateTab(){
             if(tabMotion!=null)tabMotion.cancel();
-            tabMotion=android.animation.ValueAnimator.ofFloat(0,1);tabMotion.setDuration(230);
-            tabMotion.setInterpolator(new android.view.animation.PathInterpolator(.2f,.8f,.2f,1f));
+            tabMotion=android.animation.ValueAnimator.ofFloat(0,1);tabMotion.setDuration(440);
+            tabMotion.setInterpolator(spring);
             tabMotion.addUpdateListener(v->{tabReveal=(float)v.getAnimatedValue();invalidate();});tabMotion.start();
         }
         void gradient(Canvas c,float x,float y,float w,float h,float radius,int a,int b){
-            p.setShader(new LinearGradient(x,y,x+w,y+h,(a&0xffffff)|0xbd000000,(b&0xffffff)|0xbd000000,Shader.TileMode.CLAMP));
+            p.setColor(Color.WHITE);p.setStyle(Paint.Style.FILL);
+            p.setShader(new LinearGradient(x,y,x+w,y+h,(a&0xffffff)|0x99000000,(b&0xffffff)|0x99000000,Shader.TileMode.CLAMP));
             c.drawRoundRect(x,y,x+w,y+h,radius,radius,p);p.setShader(null);
         }
         void txt(Canvas c,String s,float x,float y,float size,int color,boolean bold){
@@ -370,14 +399,15 @@ public final class MainActivity extends Activity {
             W=getWidth()/density;H=getHeight()/density;
             raw.save();raw.scale(density,density);
             Canvas c=raw;
-            ensureBackdrop();drawBackdrop(c);
+            ensureBackdrop();drawBackdrop(c);recordLiveGlass(c);
             int active=isTunnelOn()?GREEN:ORANGE;
-            c.save();c.translate(0,(1-tabReveal)*8);
+            c.save();c.translate(0,(1-tabReveal)*18);
             if(tab==0)home(c,active);else if(tab==1)locations(c);else stats(c);
             c.restore();navbar(c);
             raw.restore();
         }
         void drawBackdrop(Canvas c){
+            p.reset();p.setAntiAlias(true);
             fill(c,0xfffbfcfc);
             ambientMatrix.setTranslate(W*(phase-.5f)*.17f,0);ambientGlow.setLocalMatrix(ambientMatrix);
             p.setShader(ambientGlow);c.drawRect(0,0,W,H,p);p.setShader(lowerGlow);
@@ -490,12 +520,13 @@ public final class MainActivity extends Activity {
         @Override public boolean onTouchEvent(android.view.MotionEvent e){
             float x=e.getX()/density,y=e.getY()/density,sy=sliderY();
             if(e.getAction()==MotionEvent.ACTION_DOWN){
-                if(settle!=null)settle.cancel();downX=x;downY=y;dragging=tab==0&&y>sy&&y<sy+94;
+                if(settle!=null)settle.cancel();pressX=x;pressY=y;press(1);downX=x;downY=y;dragging=tab==0&&y>sy&&y<sy+94;
                 return true;
             }
-            if(e.getAction()==MotionEvent.ACTION_CANCEL){dragging=false;springBack();return true;}
+            if(e.getAction()==MotionEvent.ACTION_CANCEL){press(0);dragging=false;springBack();return true;}
             if(e.getAction()==MotionEvent.ACTION_MOVE&&dragging){dragOffset=vpn.state==VpnController.State.ON?Math.max(-(W-138),Math.min(0,x-downX)):Math.min(W-138,Math.max(0,x-downX));invalidate();return true;}
             if(e.getAction()==MotionEvent.ACTION_UP){
+                press(0);
                 if(dragging){
                     dragging=false;springBack();
                     if(!isTunnelOn()&&!isConnecting() && x-downX>Math.min(70,W*.25f))startVpn();
