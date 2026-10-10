@@ -65,5 +65,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="build-${GITHUB_RUN_NUMBER}"
-          cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.5.4-arm64-debug.apk
-          gh release create "$tag" AegisVPN-v0.5.4-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.5.4 · build ${GITHUB_RUN_NUMBER}" --notes "Debug APK. OpenVPN requires OpenVPN for Android; Embedded sing-box native tunnel for VLESS/VMess/Trojan/SS/Hysteria2; Home screen smart V2Ray/OpenVPN selector; live device-wide network rates (not VPN-only), enhanced glass cards; notification drawer shortcut and user-installable Quick Settings tile; no Telegram or NapsternetV. Connection on your ISP has not been verified."
+          cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.5.5-arm64-debug.apk
+          gh release create "$tag" AegisVPN-v0.5.5-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.5.5 · build ${GITHUB_RUN_NUMBER}" --notes "Debug APK. OpenVPN requires OpenVPN for Android; Embedded sing-box native tunnel for VLESS/VMess/Trojan/SS/Hysteria2; Home screen smart V2Ray/OpenVPN selector; live device-wide network rates (not VPN-only), enhanced glass cards; notification drawer shortcut and user-installable Quick Settings tile; iOS-style connecting spinner in existing slider knob; no Telegram or NapsternetV. Connection on your ISP has not been verified."

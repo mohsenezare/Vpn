@@ -78,3 +78,8 @@ Public Telegram links/file-post references are also mirrored by GitHub Actions e
 - Adds a low-priority Aegis status notification with a Connect/Disconnect action. Asks for `POST_NOTIFICATIONS` once on Android 13+. Permission denial or device notification settings can suppress the drawer entry. Native sing-box retains its *existing required foreground notification* instead of showing duplicates. OpenVPN's separate client remains in charge of its tunnel.
 - Uses a matching monochrome shield icon for the tile and native service notification. Tile active status is based on currently-observed app VPN state; if the external OpenVPN service outlives the Aegis process its last state may not be visible until Aegis is opened again.
 - All Home, Stats, animations, glass, speed meters and existing connection logic remain unchanged.
+
+## 0.5.5 iOS connection animation (all other UI locked)
+
+- Replaces the oversized sweeping arc on the middle Home connection slider with a small 12-capsule iOS-inspired spinner **inside the original white knob**, visible only while the VPN connection is starting. The original app icon remains when disconnected; the existing checkmark remains when active. Smooth clockwise movement is derived from a monotonic clock and the original redraw cadence; no extra background worker or network work is added.
+- Slider shape/position/gesture, orange/green gradients, all glass cards, home/stats content, Quick Settings tile, notifications, V2Ray/OpenVPN core and source updates are unchanged.

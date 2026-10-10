@@ -434,6 +434,27 @@ public final class MainActivity extends Activity {
         void roundedCircle(Canvas c,float x,float y,float r,int color){
             p.setColor(color);p.setShader(null);c.drawCircle(x,y,r,p);
         }
+        // Native iOS-style activity indicator: 12 softly fading capsules inside
+        // the existing white knob. Runs only while a real connection is starting.
+        // A monotonic clock gives smooth clockwise motion without new animators.
+        void drawIosConnectingSpinner(Canvas c,float cx,float cy){
+            final int count=12;
+            float head=(android.os.SystemClock.uptimeMillis()%1080L)*(count/1080f);
+            c.save();
+            c.translate(cx,cy);
+            p.setShader(null);p.setAntiAlias(true);p.setStyle(Paint.Style.FILL);
+            for(int i=0;i<count;i++){
+                float age=(head-i+count)%count;
+                float fade=(count-age)/count;
+                int alpha=44+(int)(191f*fade*fade);
+                p.setColor((alpha<<24)|0x006b7682);
+                c.save();
+                c.rotate(i*30f);
+                c.drawRoundRect(-1.75f,-19f,1.75f,-10.5f,1.75f,1.75f,p);
+                c.restore();
+            }
+            c.restore();
+        }
         @Override protected void onDraw(Canvas raw){
             density=Math.min(getResources().getDisplayMetrics().density,getHeight()/720f);
             W=getWidth()/density;H=getHeight()/density;
@@ -503,11 +524,11 @@ public final class MainActivity extends Activity {
                 txt(c,"✓",knobX-17,sy+60,48,GREEN,true);
                 txt(c,"Tunnel active",x+28,sy+53,18,0xffffffff,true);
             }else{
-                icon(c,knobX-27,sy+18,54);
+                if(isConnecting())drawIosConnectingSpinner(c,knobX,sy+45);
+                else icon(c,knobX-27,sy+18,54);
                 txt(c,isConnecting()?"Starting tunnel…":"Slide to connect",
                     x+106,sy+53,16,0xffffffff,true);
             }
-            if(isConnecting()){p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(2);p.setColor(0xffffffff);c.drawArc(x-5,sy-5,x+sw+5,sy+sh+5,phase*360,85,false,p);p.setStyle(Paint.Style.FILL);}
             String secondary=isTunnelOn()?"Tunnel established · server unverified":
                 isConnecting()?"Starting VPN engine…":"Slide the button to connect";
             center(c,secondary,W/2,sy+sh+37,12,isTunnelOn()?0xff17895e:MUTED,false);
