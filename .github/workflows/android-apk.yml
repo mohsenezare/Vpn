@@ -63,5 +63,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="build-${GITHUB_RUN_NUMBER}"
-          cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.11.0-arm64-debug.apk
-          gh release create "$tag" AegisVPN-v0.11.0-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.11.0 · build ${GITHUB_RUN_NUMBER}" --notes "Experimental arm64 build. Reference 3-tab glass home, real measured OpenVPN TCP latency sorted by device-side reachability, up to three bounded retries on volunteer relay failure, preserved paid OpenVPN import and native sing-box. Public relays are not guaranteed. OpenVPN still requires the companion application; native traffic counters remain estimates." || echo "Release publishing unavailable (GitHub App permissions); APK artifact was successfully uploaded."
+          cp app/build/outputs/apk/debug/app-debug.apk AegisVPN-v0.12.0-arm64-debug.apk
+          gh release create "$tag" AegisVPN-v0.12.0-arm64-debug.apk --target "$GITHUB_SHA" --prerelease --title "Aegis VPN 0.12.0 · build ${GITHUB_RUN_NUMBER}" --notes "Experimental arm64 build. Version 0.5 Smart Mode pool and its 12-server sing-box URLTest restored with supplemental fallback feeds. True cached backdrop blur on glass cards; transparent Settings/Locations sheets. Manual selection and measured TCP latency preserved. No server is guaranteed; real-device checks are required." || echo "Release publishing unavailable (GitHub App permissions); APK artifact was successfully uploaded."
