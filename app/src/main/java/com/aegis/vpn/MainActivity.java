@@ -27,6 +27,7 @@ public final class MainActivity extends Activity {
     private int tab=0, selectedIndex=0;
     private boolean paidMode=false;
     private boolean preferNative=true;
+    private boolean pinnedNative=false;
     private String pendingNativeConfig;
     private static final int PREPARE_NATIVE=8292;
     private final BroadcastReceiver nativeEvents=new BroadcastReceiver(){
@@ -47,6 +48,7 @@ public final class MainActivity extends Activity {
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         getWindow().setNavigationBarColor(0xfff9fafb);
         profiles=new ProfileStore(this);
+        pinnedNative=profiles.nativeSelected();
         directory=new FreeDirectory(this);
         servers=directory.load();
         paidMode=getPreferences(MODE_PRIVATE).getBoolean("paid_mode",false);
@@ -188,10 +190,35 @@ public final class MainActivity extends Activity {
     void connectNativeEntry(String link){
         try{
             String config=SingBoxConfig.build(link);
+            profiles.saveNative(link);
+            pinnedNative=true;
             paidMode=false;preferNative=true;persist();
             if(vpn.state!=VpnController.State.OFF)vpn.disconnect();
-            connectNative(config);
+            replaceNative(config);
+            screen.invalidate();
         }catch(Exception ex){info("Unsupported or incomplete config: "+ex.getMessage());}
+    }
+    // Wait for Android to release the previous TUN before switching manually.
+    void replaceNative(String config){
+        if(SingVpnService.state!=SingVpnService.TUNNEL_ACTIVE
+            &&SingVpnService.state!=SingVpnService.STARTING){connectNative(config);return;}
+        stopNative();
+        handler.postDelayed(new Runnable(){
+            int attempts=0;
+            @Override public void run(){
+                if(SingVpnService.state==SingVpnService.TUNNEL_ACTIVE
+                    ||SingVpnService.state==SingVpnService.STARTING){
+                    if(++attempts<30)handler.postDelayed(this,200);
+                    else info("Previous VPN is still stopping. Retry the selected server.");
+                }else connectNative(config);
+            }
+        },200);
+    }
+    void useSmartNative(){
+        profiles.clearNative();
+        pinnedNative=false;paidMode=false;preferNative=true;persist();
+        screen.invalidate();
+        Toast.makeText(this,"Smart V2Ray mode selected",Toast.LENGTH_SHORT).show();
     }
     void connectNative(String config){
         if(SingVpnService.state==SingVpnService.STARTING
@@ -217,7 +244,15 @@ public final class MainActivity extends Activity {
             try{config=profiles.getOpenVpnConfig();}
             catch(Exception e){info("Could not decrypt paid profile.");return;}
             if(config==null){info("Import your paid .ovpn file first.");return;}
-        }else if(preferNative&&hasNativeCandidates()){
+        }else if(preferNative&&(pinnedNative||hasNativeCandidates())){
+            if(pinnedNative){
+                try{
+                    String pinned=profiles.getNative();
+                    if(pinned==null||!SingBoxConfig.supported(pinned))throw new Exception("Pinned server is incomplete");
+                    connectNative(SingBoxConfig.build(pinned));
+                }catch(Exception e){info("Selected V2Ray config is invalid. Choose another or switch to Smart mode.");}
+                return;
+            }
             ArrayList<FeedParser.Entry> choices=new ArrayList<>(hub.entries("V2RAY"));
             choices.sort((a,b)->{
                 long ra=hubPanel.probe.rank(a.value),rb=hubPanel.probe.rank(b.value);
@@ -246,10 +281,13 @@ public final class MainActivity extends Activity {
             "Refresh free OpenVPN servers","Choose free OpenVPN server",
             "Import paid .ovpn account","Use purchased OpenVPN account",
             "Use free VPN Gate servers","Delete saved paid account",
-            "About / security","V2Ray · Proxies · NapsternetV","Use embedded V2Ray VPN"};
+            "About / security","V2Ray · Proxies · NapsternetV","Use embedded V2Ray VPN",
+            "Choose V2Ray server manually","Use Smart V2Ray selection"};
         new GlassDialog.Builder(this).setTitle("VPN Settings").setItems(actions,(dlg,which)->{
             if(which==8)hubPanel.open();
             if(which==9){paidMode=false;preferNative=true;persist();screen.invalidate();}
+            if(which==10)hubPanel.list("V2RAY");
+            if(which==11)useSmartNative();
             if(which==0)refreshAll();
             if(which==1)refresh(true);
             if(which==2)selectServer();
@@ -271,25 +309,46 @@ public final class MainActivity extends Activity {
     }
     private class Screen extends View {
         final Paint p=new Paint(3), text=new Paint(3);
+        final FrostGlass frost=new FrostGlass();
+        float pageAlpha=1f;
+        android.animation.ValueAnimator sliderAnimator;
         float density,W,H,downX,downY,dragOffset=0,phase=0;boolean dragging=false;
         final android.animation.ValueAnimator motion=android.animation.ValueAnimator.ofFloat(0,1);
         Bitmap icon;
         Screen(){
-            super(MainActivity.this);setLayerType(View.LAYER_TYPE_SOFTWARE,null);
+            super(MainActivity.this);setLayerType(View.LAYER_TYPE_HARDWARE,null);
             icon=BitmapFactory.decodeResource(getResources(),R.drawable.app_icon);
             density=getResources().getDisplayMetrics().density;
-            motion.setDuration(5200);motion.setRepeatCount(android.animation.ValueAnimator.INFINITE);motion.setRepeatMode(android.animation.ValueAnimator.REVERSE);motion.addUpdateListener(a->{phase=(float)a.getAnimatedValue();invalidate();});
+            motion.setDuration(3700);motion.setInterpolator(new android.view.animation.PathInterpolator(.25f,.05f,.25f,1f));
+            motion.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+            motion.setRepeatMode(android.animation.ValueAnimator.REVERSE);
+            motion.addUpdateListener(a->{phase=(float)a.getAnimatedValue();invalidate();});
         }
         @Override protected void onAttachedToWindow(){super.onAttachedToWindow();motion.start();}
         @Override protected void onDetachedFromWindow(){motion.cancel();super.onDetachedFromWindow();}
         @Override protected void onWindowVisibilityChanged(int visibility){super.onWindowVisibilityChanged(visibility);if(motion!=null){if(visibility==VISIBLE)motion.resume();else motion.pause();}}
         void fill(Canvas c,int color){c.drawColor(color);}
+        void changeTab(int next){
+            if(next==tab)return;
+            tab=next;pageAlpha=.78f;
+            android.animation.ValueAnimator show=android.animation.ValueAnimator.ofFloat(.78f,1f);
+            show.setDuration(320);
+            show.setInterpolator(new android.view.animation.PathInterpolator(.18f,.8f,.22f,1f));
+            show.addUpdateListener(a->{pageAlpha=(float)a.getAnimatedValue();invalidate();});
+            show.start();invalidate();
+        }
+        void settleSlider(){
+            if(sliderAnimator!=null)sliderAnimator.cancel();
+            sliderAnimator=android.animation.ValueAnimator.ofFloat(dragOffset,0f);
+            sliderAnimator.setDuration(390);
+            sliderAnimator.setInterpolator(new android.view.animation.OvershootInterpolator(.72f));
+            sliderAnimator.addUpdateListener(a->{dragOffset=(float)a.getAnimatedValue();invalidate();});
+            sliderAnimator.start();
+        }
         void card(Canvas c,float x,float y,float w,float h,float r,int bg,int border){
-            p.reset();p.setAntiAlias(true);p.setStyle(Paint.Style.FILL);p.setColor(bg);
-            p.setShadowLayer(12,0,6,0x18000000);
-            c.drawRoundRect(x,y,x+w,y+h,r,r,p);p.clearShadowLayer();
-            if(border!=0){p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(1);p.setColor(border);c.drawRoundRect(x+.5f,y+.5f,x+w-.5f,y+h-.5f,r,r,p);}
-            p.setStyle(Paint.Style.FILL);
+            frost.ensure(W,H,isTunnelOn());
+            frost.draw(c,x,y,w,h,r,bg,border,W,H);
+            p.reset();p.setAntiAlias(true);p.setStyle(Paint.Style.FILL);
         }
         void gradient(Canvas c,float x,float y,float w,float h,float radius,int a,int b){
             p.setShader(new LinearGradient(x,y,x+w,y+h,a,b,Shader.TileMode.CLAMP));
@@ -332,7 +391,9 @@ public final class MainActivity extends Activity {
                 p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(1.3f);p.setColor(0xafffffff);c.drawPath(ribbon,p);
                 p.setStrokeWidth(24);p.setColor(0x17ffffff);c.drawPath(ribbon,p);p.setStyle(Paint.Style.FILL);
             }
+            c.saveLayerAlpha(0,0,W,H,Math.min(255,Math.round(255*pageAlpha)));
             if(tab==0)home(c,active);else if(tab==1)locations(c);else stats(c);
+            c.restore();
             navbar(c);
             raw.restore();
         }
@@ -380,9 +441,11 @@ public final class MainActivity extends Activity {
             roundedCircle(c,62,cy+44,23,0xffeef7f4);
             txt(c,paidMode?"★":"🌐",47,cy+54,27,ORANGE,true);
             String name=paidMode?"Private OpenVPN account":
+                preferNative&&pinnedNative?"V2Ray · manually selected":
                 preferNative&&hasNativeCandidates()?"Embedded VPN · V2Ray":
                 (servers.isEmpty()?"No free OpenVPN relay":servers.get(Math.min(selectedIndex,servers.size()-1)).country);
             String subtitle=paidMode?"Imported .ovpn profile":
+                preferNative&&pinnedNative?"Pinned server · tap library to change":
                 preferNative&&hasNativeCandidates()?(hub.entries("V2RAY").size()+" config candidates · not validated"):
                 (servers.isEmpty()?"Tap Smart update to refresh":servers.get(Math.min(selectedIndex,servers.size()-1)).host);
             txt(c,name,98,cy+38,15,INK,true);
@@ -436,14 +499,15 @@ public final class MainActivity extends Activity {
         @Override public boolean onTouchEvent(android.view.MotionEvent e){
             float x=e.getX()/density,y=e.getY()/density,sy=sliderY();
             if(e.getAction()==MotionEvent.ACTION_DOWN){
+                if(sliderAnimator!=null)sliderAnimator.cancel();
                 downX=x;downY=y;dragging=tab==0&&y>sy&&y<sy+94;
                 return true;
             }
-            if(e.getAction()==MotionEvent.ACTION_CANCEL){dragging=false;dragOffset=0;invalidate();return true;}
-            if(e.getAction()==MotionEvent.ACTION_MOVE&&dragging){dragOffset=vpn.state==VpnController.State.ON?Math.max(-(W-138),Math.min(0,x-downX)):Math.min(W-138,Math.max(0,x-downX));invalidate();return true;}
+            if(e.getAction()==MotionEvent.ACTION_CANCEL){dragging=false;settleSlider();return true;}
+            if(e.getAction()==MotionEvent.ACTION_MOVE&&dragging){dragOffset=isTunnelOn()?Math.max(-(W-138),Math.min(0,x-downX)):Math.min(W-138,Math.max(0,x-downX));invalidate();return true;}
             if(e.getAction()==MotionEvent.ACTION_UP){
                 if(dragging){
-                    dragging=false;dragOffset=0;invalidate();
+                    dragging=false;settleSlider();performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY);
                     if(!isTunnelOn()&&!isConnecting() && x-downX>Math.min(70,W*.25f))startVpn();
                     else if(isTunnelOn()&&downX-x>Math.min(70,W*.25f)){
                         if(SingVpnService.state==SingVpnService.TUNNEL_ACTIVE)stopNative();
@@ -451,7 +515,7 @@ public final class MainActivity extends Activity {
                     }
                     return true;
                 }
-                if(y>H-85){tab=Math.min(2,(int)(x/W*3));invalidate();return true;}
+                if(y>H-85){changeTab(Math.min(2,(int)(x/W*3)));return true;}
                 if(y<85){if(x>W-85)showSettings();else if(x<85)hubPanel.open();return true;}
                 if(tab==0&&y>serverY()+168&&y<serverY()+210){hubPanel.open();return true;}
                 if(tab==0&&y>serverY()+98&&y<serverY()+160){refreshAll();return true;}
