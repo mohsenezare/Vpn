@@ -32,6 +32,7 @@ public final class MainActivity extends Activity {
     private int tab=0, selectedIndex=0;
     private boolean paidMode=false;
     private boolean preferNative=true;
+    private int openVpnRetries=0;
     private String pendingNativeConfig;
     private static final int PREPARE_NATIVE=8292;
     private final BroadcastReceiver nativeEvents=new BroadcastReceiver(){
@@ -100,7 +101,7 @@ public final class MainActivity extends Activity {
         vpn=new VpnController(this, () -> screen.invalidate(), msg -> {
             new GlassDialog.Builder(this).setTitle("OpenVPN").setMessage(msg).setPositiveButton("OK",null).show();
             screen.invalidate();
-        });
+        },this::handleOpenVpnFailure);
         hub=new SourceHub(this);hubPanel=new HubPanel(this,hub);
         screen=new Screen();
         setContentView(screen);
@@ -186,8 +187,34 @@ public final class MainActivity extends Activity {
             startNativeService(config);
         }else connectNative(config);
     }
+    /** Tries up to three distinct relays after confirmed failure, never a fake success.
+     * Skip hosts whose TCP port was demonstrably unreachable on this device.
+     * A paid account is never silently replaced with a volunteer relay. */
+    void handleOpenVpnFailure(String why){
+        if(paidMode||preferNative||servers.isEmpty()||
+           why.startsWith("Install")||why.contains("permission")||
+           why.contains("authorization")||why.contains("Could not start")){
+            info(why);return;
+        }
+        if(openVpnRetries>=2){info("Free OpenVPN did not connect after 3 attempts. "+
+            "Try a different network or use a working native configuration. Last error: "+why);return;}
+        int next=-1;
+        for(int i=selectedIndex+1;i<servers.size();i++){
+            if(openProbe.ms(servers.get(i))!=-1){next=i;break;}
+        }
+        if(next<0){info("No additional reachable free OpenVPN ports. Last error: "+why);return;}
+        openVpnRetries++;
+        selectedIndex=next;persist();screen.invalidate();
+        final String nextConfig=servers.get(next).config;
+        Toast.makeText(this,"OpenVPN retry "+(openVpnRetries+1)+"/3 · next server",Toast.LENGTH_SHORT).show();
+        handler.postDelayed(()->{
+            if(!paidMode&&!preferNative&&vpn.state==VpnController.State.OFF)
+                vpn.connect(nextConfig);
+        },500);
+    }
     void selectOpenVpnServer(int index){
         if(index<0||index>=servers.size())return;
+        openVpnRetries=0;
         selectedIndex=index;paidMode=false;preferNative=false;persist();
         String ovpn=servers.get(index).config;
         if(SingVpnService.state==SingVpnService.TUNNEL_ACTIVE||SingVpnService.state==SingVpnService.STARTING){
@@ -423,6 +450,7 @@ public final class MainActivity extends Activity {
         }else{
             info("No available configuration. Tap Smart update. Public config counts are not evidence that nodes work.");return;
         }
+        if(!paidMode)openVpnRetries=0;
         vpn.connect(config);screen.invalidate();
     }
     void showSettings(){
