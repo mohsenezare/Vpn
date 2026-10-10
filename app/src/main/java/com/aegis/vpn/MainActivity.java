@@ -257,7 +257,7 @@ public final class MainActivity extends Activity {
                 txt(c,isConnecting()?"Starting tunnel…":"Slide to connect",
                     x+106,sy+53,16,0xffffffff,true);
             }
-            String secondary=isTunnelOn()?"Tunnel active · "+(selected==null?"":ProxyScanner.label(selected)):
+            String secondary=isTunnelOn()?"Tunnel active · V2Ray":
                 isConnecting()?"Starting VPN engine…":"Slide the button to connect";
             center(c,secondary,W/2,sy+sh+37,12,isTunnelOn()?0xff17895e:MUTED,false);
             float cy=serverY();

@@ -42,6 +42,7 @@ public final class SingVpnService extends VpnService {
         }
         if(ACTION_SCAN.equals(intent.getAction())){
             if(ProxyScanner.busy)return START_NOT_STICKY;
+            ProxyScanner.busy=true;
             startForeground(91,notification("Testing V2Ray configurations…"));
             worker.execute(()->{
                 try{
@@ -50,7 +51,7 @@ public final class SingVpnService extends VpnService {
                         Intent update=new Intent(ACTION_STATUS).setPackage(getPackageName()).putExtra("scan",true);
                         sendBroadcast(update);
                     });
-                }catch(Exception e){ProxyScanner.busy=false;ProxyScanner.summary="Unable to start tests";broadcast();}
+                }catch(Exception e){ProxyScanner.busy=false;ProxyScanner.summary="Unable to start tests";sendBroadcast(new Intent(ACTION_STATUS).setPackage(getPackageName()).putExtra("scan",true));}
                 if(core==null){stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();}
                 else updateNotification("VPN tunnel active");
             });
