@@ -8,7 +8,7 @@ public class FeedParserTest {
   check(FeedParser.parse("<a href=\"https://t.me/proxy?server=x&amp;port=443&amp;secret=abc\">x</a>","x").get(0).value.contains("&port="),"entities");
   check(FeedParser.parse("tg://proxy?server=x&port=443","x").isEmpty(),"missing secret");
   check(FeedParser.parse("vless://123@example.com:99999","x").isEmpty(),"port range");
-  check(FeedParser.parse("data-post=\"mitivpn/123\"><b>config.npvt</b>","x").isEmpty(),"ignore unsupported NPV posts");
+  check(FeedParser.parse("data-post=\"mitivpn/123\"><b>config.npvt</b>","x").get(0).value.equals("https://t.me/mitivpn/123"),"Napsternet document post");
   check(FeedParser.parse("<html>Unavailable</html>","x").isEmpty(),"empty feed");
   System.out.println("7 parser checks passed");
  }

@@ -78,7 +78,7 @@ final class SourceHub {
      if(entries.isEmpty())throw new IOException("No valid configs in public mirror");
     }
     JSONArray a=new JSONArray();
-    for(FeedParser.Entry e:entries){if(!e.kind.equals("V2RAY"))continue;JSONObject o=new JSONObject();o.put("k",e.kind);o.put("v",e.value);a.put(o);}
+    for(FeedParser.Entry e:entries){JSONObject o=new JSONObject();o.put("k",e.kind);o.put("v",e.value);a.put(o);}
     context.getSharedPreferences("hub",0).edit().putString(s,a.toString()).putLong(s+"time",retrievedAt).putString(s+"error","").apply();
    }catch(Exception e){context.getSharedPreferences("hub",0).edit().putString(s+"error",e.getMessage()==null?"Network error":e.getMessage()).apply();}
    return null;

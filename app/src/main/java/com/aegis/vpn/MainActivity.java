@@ -15,6 +15,7 @@ import java.util.*;
 public final class MainActivity extends Activity {
     private static final int PREPARE=8292, INK=0xff163e45, MUTED=0xff51757b;
     private SourceHub hub;
+    private V5Connection v5;
     private SecureLinks vault;
     private final EndpointProbe probe=new EndpointProbe();
     private final Handler handler=new Handler(Looper.getMainLooper());
@@ -36,9 +37,6 @@ public final class MainActivity extends Activity {
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         hub=new SourceHub(this);vault=new SecureLinks(this);selected=vault.selected();
         manual=getPreferences(0).getBoolean("two_mode_manual",false);
-        // Retire the removed background job, retaining existing V2Ray credentials.
-        android.app.job.JobScheduler scheduler=(android.app.job.JobScheduler)getSystemService(JOB_SCHEDULER_SERVICE);
-        if(scheduler!=null)scheduler.cancelAll();
         IntentFilter filter=new IntentFilter(SingVpnService.ACTION_STATUS);
         if(Build.VERSION.SDK_INT>=33)registerReceiver(events,filter,Context.RECEIVER_NOT_EXPORTED);
         else registerReceiver(events,filter);
@@ -60,9 +58,9 @@ public final class MainActivity extends Activity {
         TextView caption=text("برای اتصال یا قطع، دکمه را لمس کن",12,false);caption.setTextColor(MUTED);add(column,caption,7);
         selection=button("",()->{if(manual)showConfigs();});selection.setTextSize(14);selection.setMinHeight(dp(86));add(column,selection,32);
         refresh=button("به‌روزرسانی کانفیگ‌ها",this::update);refresh.setTextSize(14);add(column,refresh,14);
-        TextView version=text("AEGIS  /  0.13",11,false);version.setTextColor(MUTED);add(column,version,24);
-        setContentView(root);render();
-        if(hub.stale())update();
+        TextView version=text("AEGIS  /  0.14",11,false);version.setTextColor(MUTED);add(column,version,24);
+        setContentView(root);
+        v5=new V5Connection(this,hub,this::render);render();
     }
     private TextView text(String value,int size,boolean bold){
         TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setTextColor(INK);t.setGravity(Gravity.CENTER);
@@ -75,7 +73,7 @@ public final class MainActivity extends Activity {
     private void add(LinearLayout column,View child,int top){
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(top);column.addView(child,lp);
     }
-    private boolean active(){return SingVpnService.state==SingVpnService.STARTING||SingVpnService.state==SingVpnService.TUNNEL_ACTIVE||starting||waiting;}
+    private boolean active(){return SingVpnService.state==SingVpnService.STARTING||SingVpnService.state==SingVpnService.TUNNEL_ACTIVE||starting||waiting||(v5!=null&&(v5.vpn.state!=VpnController.State.OFF||v5.pendingNativeConfig!=null));}
     private void choose(boolean value){
         if(active()){info("ابتدا اتصال فعلی را قطع کن.");return;}
         manual=value;getPreferences(0).edit().putBoolean("two_mode_manual",value).apply();render();
@@ -87,33 +85,20 @@ public final class MainActivity extends Activity {
         mode5.setTextColor(manual?MUTED:INK);mode2.setTextColor(manual?INK:MUTED);
         int s=SingVpnService.state;
         power.setText(active()?"■":"⏻");power.setTextColor(active()?0xff008b78:INK);
-        status.setText(waiting?"در حال دریافت کانفیگ…":starting||s==SingVpnService.STARTING?"در حال اتصال…":s==SingVpnService.TUNNEL_ACTIVE?"تونل فعال است":s==SingVpnService.FAILED?"اتصال ناموفق":"آمادهٔ اتصال");
+        status.setText(waiting?"در حال دریافت کانفیگ…":starting||s==SingVpnService.STARTING||(v5!=null&&v5.vpn.state==VpnController.State.CONNECTING)?"در حال اتصال…":(s==SingVpnService.TUNNEL_ACTIVE||(v5!=null&&v5.vpn.state==VpnController.State.ON))?"تونل فعال است":s==SingVpnService.FAILED?"اتصال ناموفق":"آمادهٔ اتصال");
         selection.setText(manual?(selected.isEmpty()?"انتخاب کانفیگ V2Ray  ›":label(selected)+"\nتغییر کانفیگ  ›"):"اتصال خودکار نسخهٔ ۵\nهمان هسته و تنظیمات اتصال اصلی");
-        refresh.setText(hub.busy?"در حال به‌روزرسانی…":"به‌روزرسانی کانفیگ‌ها");refresh.setEnabled(!hub.busy);
+        refresh.setText((hub.busy||(v5!=null&&v5.updatingAll))?"در حال به‌روزرسانی…":"به‌روزرسانی کانفیگ‌ها");refresh.setEnabled(!hub.busy&&(v5==null||!v5.updatingAll));
     }
     private void update(){
+        if(!manual){v5.refreshAll();return;}
         hub.refresh(()->{if(!destroyed){render();Toast.makeText(this,hub.entries("V2RAY").size()+" کانفیگ عمومی موجود",Toast.LENGTH_SHORT).show();}});render();
     }
     private void toggle(){
         if(active()){
-            waiting=false;starting=false;pending=null;
-            startService(new Intent(this,SingVpnService.class).setAction(SingVpnService.ACTION_STOP));render();return;
+            waiting=false;starting=false;pending=null;v5.stop();render();return;
         }
         if(manual){if(selected.isEmpty()){showConfigs();return;}connect(selected);return;}
-        if(hub.entries("V2RAY").isEmpty()){
-            waiting=true;render();hub.refresh(()->{if(!destroyed&&waiting){waiting=false;connectAuto();}});
-        }else connectAuto();
-    }
-    private void connectAuto(){
-        try{
-            // Exact build-25 ordering: measured rank first, VLESS preference second.
-            ArrayList<FeedParser.Entry> choices=new ArrayList<>(hub.entries("V2RAY"));
-            choices.sort((a,b)->{long ra=probe.rank(a.value),rb=probe.rank(b.value);if(ra!=rb)return Long.compare(ra,rb);return Boolean.compare(!a.value.startsWith("vless://"),!b.value.startsWith("vless://"));});
-            ArrayList<String> links=new ArrayList<>();
-            for(FeedParser.Entry e:choices){if(links.size()>=12)break;if(SingBoxConfig.supported(e.value))links.add(e.value);}
-            if(links.isEmpty()){render();info("کانفیگ قابل استفاده دریافت نشد. اینترنت را بررسی و دوباره به‌روزرسانی کن.");return;}
-            prepare(SingBoxConfig.buildAuto(links));
-        }catch(Exception e){starting=false;render();info(e.getMessage());}
+        v5.startVpn();
     }
     private void connect(String link){try{prepare(SingBoxConfig.build(link));}catch(Exception e){info(e.getMessage());}}
     private void prepare(String config){
@@ -128,6 +113,7 @@ public final class MainActivity extends Activity {
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
         if(request==PREPARE){if(result==RESULT_OK)launch();else{pending=null;starting=false;render();}}
+        else if(v5!=null){v5.result(request,result);render();}
     }
     private ArrayList<FeedParser.Entry> entries(){
         LinkedHashMap<String,FeedParser.Entry> all=new LinkedHashMap<>();
@@ -174,9 +160,9 @@ public final class MainActivity extends Activity {
         try{JSONObject o=SingBoxConfig.outbound(link);return o.getString("type").toUpperCase(Locale.ROOT)+"  ·  "+o.getString("server")+":"+o.getInt("server_port");}
         catch(Exception e){return "V2Ray";}
     }
-    private void info(String msg){if(!destroyed)new GlassDialog.Builder(this).setMessage(msg==null?"خطای اتصال":msg).setPositiveButton("باشه",null).show();}
+    void info(String msg){if(!destroyed)new GlassDialog.Builder(this).setMessage(msg==null?"خطای اتصال":msg).setPositiveButton("باشه",null).show();}
     @Override protected void onResume(){super.onResume();render();}
-    @Override protected void onDestroy(){destroyed=true;waiting=false;try{unregisterReceiver(events);}catch(Exception ignored){}handler.removeCallbacksAndMessages(null);super.onDestroy();}
+    @Override protected void onDestroy(){destroyed=true;waiting=false;try{unregisterReceiver(events);}catch(Exception ignored){}handler.removeCallbacksAndMessages(null);if(v5!=null)v5.close();super.onDestroy();}
 
     /** Static backdrop cached once per size; frosted controls sample a blurred copy. */
     private final class Backdrop extends View {
