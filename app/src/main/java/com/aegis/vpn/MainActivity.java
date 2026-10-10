@@ -425,24 +425,30 @@ public final class MainActivity extends Activity {
             catch(Exception e){info("Saved server could not be used: "+e.getMessage());}
             return;
         }else if(preferNative&&hasNativeCandidates()){
-            ArrayList<FeedParser.Entry> choices=new ArrayList<>(hubPanel.entries("V2RAY"));
-            // V5 priority: its working community sources first, tested TCP second.
-            // Do not put arbitrary large country feed lists ahead of the original pool.
+            // v0.5.0 baseline: the original community feeds, 12 outbound candidates,
+            // three-minute sing-box URLTest. Do not let massive country lists or
+            // device TCP preflight crowd out the trusted-in-practice v0.5 pool.
+            ArrayList<FeedParser.Entry> legacy=new ArrayList<>(hub.entries("V2RAY"));
+            legacy.removeIf(e->!SourceHub.preferred(e.source));
+            // If the original sources are blocked, retain the current supplementary feeds
+            // as a fallback only. Manual choices are kept in the encrypted vault.
+            ArrayList<FeedParser.Entry> choices=legacy.isEmpty()
+                ?new ArrayList<>(hubPanel.entries("V2RAY")):legacy;
+            if(legacy.isEmpty())choices.removeIf(e->!SingBoxConfig.supported(e.value));
+            // Same v0.5 comparator: measured reachable TCP first when available,
+            // then VLESS first. No unverified assumption that TCP means VPN usable.
             choices.sort((a,b)->{
-                boolean pa=SourceHub.preferred(a.source),pb=SourceHub.preferred(b.source);
-                if(pa!=pb)return pa?-1:1;
                 long ra=hubPanel.probe.rank(a.value),rb=hubPanel.probe.rank(b.value);
                 if(ra!=rb)return Long.compare(ra,rb);
                 return Boolean.compare(!a.value.startsWith("vless://"),!b.value.startsWith("vless://"));
             });
-            ArrayList<String> candidates=new ArrayList<>();
-            // Restore v0.5 selection: no hostname cap that accidentally excludes
-            // two working credentials on the same Reality/CDN endpoint.
+            java.util.LinkedHashSet<String> selected=new java.util.LinkedHashSet<>();
             for(FeedParser.Entry e:choices){
-                if(candidates.size()>=12)break;
-                if(SingBoxConfig.supported(e.value))candidates.add(e.value);
+                if(selected.size()>=12)break;
+                if(SingBoxConfig.supported(e.value))selected.add(e.value);
             }
-            try{connectNative(SingBoxConfig.buildAuto(candidates));}
+            if(selected.isEmpty()){info("No usable v0.5-format links; update original sources or select a manual server.");return;}
+            try{connectNative(SingBoxConfig.buildAuto(new ArrayList<>(selected)));}
             catch(Exception ex){info("No supported native proxy config: "+ex.getMessage());}
             return;
         }else if(!servers.isEmpty()){
