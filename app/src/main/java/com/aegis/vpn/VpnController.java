@@ -11,8 +11,8 @@ public final class VpnController {
     private static final int ASK_APP=8841,ASK_VPN=8842;
     private final Activity activity;
     private final Runnable changed;
-    private final java.util.function.Consumer<String> message;
     private final java.util.function.Consumer<String> failed;
+    private long attemptStartedAt=0L;
     private IOpenVPNAPIService remote;
     private boolean callbackRegistered;
     private String pending;
@@ -27,9 +27,8 @@ public final class VpnController {
         }
     }
     VpnController(Activity activity,Runnable changed,
-                  java.util.function.Consumer<String> message,
                   java.util.function.Consumer<String> failed){
-        this.activity=activity;this.changed=changed;this.message=message;this.failed=failed;
+        this.activity=activity;this.changed=changed;this.failed=failed;
     }
     private final IOpenVPNStatusCallback callback=new IOpenVPNStatusCallback.Stub(){
         @Override public void newStatus(String uuid,String status,String text,String level){
@@ -43,6 +42,9 @@ public final class VpnController {
                     if(wasConnecting)failed.accept("OpenVPN authentication failed");
                 }else if(s.equals("NOPROCESS")||s.equals("EXITING")||s.equals("DISCONNECTED")){
                     boolean wasConnecting=state==State.CONNECTING;
+                    // Status callbacks may replay the PREVIOUS profile's EXITING
+                    // during a rapid server switch. Let the new attempt settle first.
+                    if(wasConnecting&&SystemClock.elapsedRealtime()-attemptStartedAt<2500)return;
                     timer.removeCallbacks(timeout);state=State.OFF;changed.run();
                     if(wasConnecting)failed.accept("Server closed the OpenVPN connection");
                 }else if(s.equals("CONNECTING")||s.equals("WAIT")||s.equals("AUTH")||
@@ -69,7 +71,8 @@ public final class VpnController {
     };
     void connect(String ovpn){
         if(state!=State.OFF||ovpn==null||ovpn.isEmpty())return;
-        state=State.CONNECTING;changed.run();pending=ovpn;requesting=true;
+        state=State.CONNECTING;attemptStartedAt=SystemClock.elapsedRealtime();
+        changed.run();pending=ovpn;requesting=true;
         try{
             if(remote==null){
                 Intent i=new Intent("de.blinkt.openvpn.api.IOpenVPNAPIService").setPackage(PACKAGE);
