@@ -503,6 +503,7 @@ public final class MainActivity extends Activity {
         private Shader warmShader,greenShader,footerShader,sliderWarmShader,sliderGreenShader;
         private Bitmap frostBitmap;private BitmapShader frostShader;
         private float cachedW=-1,cachedH=-1;
+        private boolean cachedConnected=false;
         android.animation.ValueAnimator slide,page;
         Bitmap shield;
         Screen(){
@@ -577,45 +578,84 @@ public final class MainActivity extends Activity {
             while(s.length()>3&&t.measureText(s+"…")>width)s=s.substring(0,s.length()-1);
             return s+"…";
         }
-        /** Frosted iOS-style card. Blurred backdrop is rendered ONCE on size
-         * changes at 1/6 resolution; no software BlurMaskFilter per frame.
+        /**
+         * Real frosted glass: each card samples a TWO-PASS-BLURRED copy of
+         * the very same ambient canvas directly behind its position.
+         * Its optical white wash is deliberately only ~30% opacity;
+         * older builds painted an opaque 68%-white slab that hid the blur.
+         * The expensive blur is precomputed at low resolution once per size/state,
+         * not on every animation frame.
          */
         void card(Canvas c,float x,float y,float w,float h,float radius,int color){
-            p.setStyle(Paint.Style.FILL);p.setAlpha(255);
+            p.setShader(null);p.setStyle(Paint.Style.FILL);p.setAlpha(255);
+            // Soft floating separation from the luminous background; cheap to redraw.
+            p.setColor(0x102a5663);
+            c.drawRoundRect(x+1.5f,y+3.3f,x+w+1.5f,y+h+4.8f,radius,radius,p);
             if(frostShader!=null){
+                p.setColor(0xffffffff);
                 p.setShader(frostShader);
+                p.setAlpha(239);
                 c.drawRoundRect(x,y,x+w,y+h,radius,radius,p);
-                p.setShader(null);
+                p.setShader(null);p.setAlpha(255);
             }
-            int wash=android.graphics.Color.argb(173,
+            // Preserve visible peach/mint/lilac behind the glass.
+            int wash=android.graphics.Color.argb(
+                Math.min(93,Math.max(58,android.graphics.Color.alpha(color)/3)),
                 android.graphics.Color.red(color),
                 android.graphics.Color.green(color),
                 android.graphics.Color.blue(color));
             p.setColor(wash);
             c.drawRoundRect(x,y,x+w,y+h,radius,radius,p);
-            p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(1.05f);p.setColor(0xedffffff);
-            c.drawRoundRect(x+.65f,y+.65f,x+w-.65f,y+h-.65f,radius,radius,p);
-            p.setStyle(Paint.Style.FILL);p.setShader(null);p.setAlpha(255);
+            // A two-dimensional refractive highlight, without a per-frame shader allocation.
+            p.setColor(0x26ffffff);
+            c.drawRoundRect(x+2,y+2,x+w-2,y+h*.54f,
+                Math.max(5,radius-2),Math.max(5,radius-2),p);
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(1.35f);
+            p.setColor(0xebffffff);
+            c.drawRoundRect(x+.7f,y+.7f,x+w-.7f,y+h-.7f,radius,radius,p);
+            p.setColor(0x40ffffff);p.setStrokeWidth(2.2f);
+            c.drawArc(x+4,y+3,x+w-4,y+h*.40f,194,148,false,p);
+            p.setStyle(Paint.Style.FILL);p.setAlpha(255);
+        }
+        /** The offscreen blur uses exactly the same gradients AND flowing waves
+         * that the visible home screen paints. Sampling any other drawing is a
+         * flat overlay, not backdrop blur.
+         */
+        void drawAmbientBackground(Canvas c){
+            c.drawColor(0xfffcfcfa);
+            p.setStyle(Paint.Style.FILL);p.setAlpha(255);
+            p.setShader(isTunnelOn()?greenShader:warmShader);
+            c.drawRect(0,0,W,H,p);
+            p.setShader(footerShader);
+            c.drawRect(0,0,W,H,p);
+            p.setShader(null);
+            for(int i=0;i<4;i++){
+                Path wave=new Path();
+                float offset=i*66+phase*9;
+                wave.moveTo(W+30,-120+offset);
+                wave.cubicTo(W*.45f,100+offset,W*.96f,245+offset,-80,H*.67f+offset);
+                p.setStyle(Paint.Style.STROKE);
+                p.setStrokeWidth(1.4f);p.setColor(0x9cffffff);
+                c.drawPath(wave,p);
+                p.setStrokeWidth(14);p.setColor(0x17ffffff);
+                c.drawPath(wave,p);
+            }
+            p.setStyle(Paint.Style.FILL);
         }
         void prepareFrostedBackdrop(){
-            int bw=Math.max(64,(int)(W/6)),bh=Math.max(110,(int)(H/6));
+            int bw=Math.max(76,(int)(W/5)),bh=Math.max(125,(int)(H/5));
             if(frostBitmap!=null)frostBitmap.recycle();
             frostBitmap=Bitmap.createBitmap(bw,bh,Bitmap.Config.ARGB_8888);
-            Canvas bg=new Canvas(frostBitmap);bg.drawColor(0xfffffaf8);
-            Paint q=new Paint(Paint.ANTI_ALIAS_FLAG);
-            q.setShader(new RadialGradient(bw*.83f,bh*.37f,bw*.79f,
-                new int[]{0xffffbe86,0x98fff2c5,0x00ffffff},null,Shader.TileMode.CLAMP));
-            bg.drawRect(0,0,bw,bh,q);
-            q.setShader(new RadialGradient(bw*.85f,bh*.85f,bw*.83f,
-                new int[]{0xff8eecc9,0xaabaf9eb,0x00ffffff},null,Shader.TileMode.CLAMP));
-            bg.drawRect(0,0,bw,bh,q);
-            q.setShader(new RadialGradient(bw*.05f,bh*.98f,bw*.78f,
-                new int[]{0xfff8c8df,0x55e1d9ff,0x00ffffff},null,Shader.TileMode.CLAMP));
-            bg.drawRect(0,0,bw,bh,q);q.setShader(null);
-            // Two separable blur passes on a TINY cached background, never every frame.
+            Canvas bg=new Canvas(frostBitmap);
+            bg.save();
+            bg.scale(bw/W,bh/H);
+            drawAmbientBackground(bg);
+            bg.restore();
+            // Separable 2-pass 20-25dp optical blur, only on a tiny cached image.
             int[] pixels=new int[bw*bh],scratch=new int[pixels.length];
             frostBitmap.getPixels(pixels,0,bw,0,0,bw,bh);
-            int radius=4;
+            int radius=5;
             for(int y=0;y<bh;y++)for(int x=0;x<bw;x++){
                 int ar=0,rr=0,gg=0,bb=0,count=0;
                 for(int dx=-radius;dx<=radius;dx++){
@@ -634,7 +674,9 @@ public final class MainActivity extends Activity {
             }
             frostBitmap.setPixels(pixels,0,bw,0,0,bw,bh);
             frostShader=new BitmapShader(frostBitmap,Shader.TileMode.CLAMP,Shader.TileMode.CLAMP);
-            Matrix matrix=new Matrix();matrix.setScale(W/bw,H/bh);frostShader.setLocalMatrix(matrix);
+            Matrix matrix=new Matrix();
+            matrix.setScale(W/bw,H/bh);
+            frostShader.setLocalMatrix(matrix);
         }
         void gradient(Canvas c,float x,float y,float w,float h,float r,int first,int last){
             p.setStyle(Paint.Style.FILL);
@@ -674,31 +716,23 @@ public final class MainActivity extends Activity {
             raw.save();raw.scale(density,density);
             Canvas c=raw;c.drawColor(0xfffcfcfa);
             boolean on=isTunnelOn();
-            if(cachedW!=W||cachedH!=H){
-                cachedW=W;cachedH=H;
-                prepareFrostedBackdrop();
-                warmShader=new RadialGradient(W*.84f,H*.32f,W*.84f,
-                    new int[]{0xb8ffa65c,0x35ffdec6,0x00ffffff},null,Shader.TileMode.CLAMP);
-                greenShader=new RadialGradient(W*.84f,H*.32f,W*.84f,
-                    new int[]{0xb359ecc5,0x25e8fff5,0x00ffffff},null,Shader.TileMode.CLAMP);
-                footerShader=new RadialGradient(W*.01f,H*.84f,W*.94f,
-                    new int[]{0x6af8bbc8,0x00ffffff},null,Shader.TileMode.CLAMP);
+            if(cachedW!=W||cachedH!=H||cachedConnected!=on){
+                cachedW=W;cachedH=H;cachedConnected=on;
+                warmShader=new RadialGradient(W*.88f,H*.34f,W*.84f,
+                    new int[]{0xdfffad61,0x56ffdec0,0x00ffffff},null,Shader.TileMode.CLAMP);
+                greenShader=new RadialGradient(W*.86f,H*.39f,W*.85f,
+                    new int[]{0xd755efb2,0x5ae3fff0,0x00ffffff},null,Shader.TileMode.CLAMP);
+                footerShader=new RadialGradient(W*.01f,H*.82f,W*.94f,
+                    new int[]{0x9bf8bbc8,0x00ffffff},null,Shader.TileMode.CLAMP);
                 float sx=24,sy=sliderY(),width=W-48;
                 sliderWarmShader=new LinearGradient(sx,sy,sx+width,sy+92,
                     0xffffbd50,0xffff6039,Shader.TileMode.CLAMP);
                 sliderGreenShader=new LinearGradient(sx,sy,sx+width,sy+92,
                     0xff00efbf,0xff04ad74,Shader.TileMode.CLAMP);
+                // Initialize the shader before sampling the real ambient canvas.
+                prepareFrostedBackdrop();
             }
-            p.setShader(on?greenShader:warmShader);c.drawRect(0,0,W,H,p);
-            p.setShader(footerShader);c.drawRect(0,0,W,H,p);p.setShader(null);
-            for(int i=0;i<3;i++){
-                Path path=new Path();float offset=i*75+phase*12;
-                path.moveTo(W+30,-95+offset);
-                path.cubicTo(W*.52f,110+offset,W*.88f,250+offset,-80,H*.66f+offset);
-                p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(1.3f);p.setColor(0x87ffffff);
-                c.drawPath(path,p);p.setStrokeWidth(21);p.setColor(0x10ffffff);c.drawPath(path,p);
-            }
-            p.setStyle(Paint.Style.FILL);
+            drawAmbientBackground(c);
             header(c);
             c.save();c.translate(0,(1-pageAlpha)*16);c.saveLayerAlpha(0,94,W,H-74,(int)(255*Math.max(0,Math.min(1,pageAlpha))));
             if(tab==0)home(c);else if(tab==1)locations(c);else if(tab==2)stats(c);else backup(c);
