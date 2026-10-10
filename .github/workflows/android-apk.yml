@@ -54,6 +54,50 @@ jobs:
           java -cp /tmp/parser-tests com.aegis.vpn.TrafficMeterTest
       - name: Compile debug APK
         run: gradle --no-daemon :app:assembleDebug
+      - name: Package complete source code, dependencies and APK
+        run: |
+          set -euo pipefail
+          export BUNDLE_DIR="$RUNNER_TEMP/AegisVPN-v0.5.4-FULL"
+          mkdir -p "$BUNDLE_DIR/app/libs" "$BUNDLE_DIR/builds" "$BUNDLE_DIR/third_party/sing-box-v1.12.22"
+          git archive HEAD | tar -xf - -C "$BUNDLE_DIR"
+          cp app/libs/libbox.aar "$BUNDLE_DIR/app/libs/libbox.aar"
+          cp app/build/outputs/apk/debug/app-debug.apk "$BUNDLE_DIR/builds/AegisVPN-v0.5.4-arm64-debug.apk"
+          tar -C /tmp/sing-box --exclude=.git -cf - . | tar -C "$BUNDLE_DIR/third_party/sing-box-v1.12.22" -xf -
+          cat > "$BUNDLE_DIR/START_HERE.txt" <<'BUNDLE_GUIDE'
+          AEGIS VPN 0.5.4 - COMPLETE SOURCE BUNDLE
+          =========================================
+          app/src/                  Android Java and resources
+          app/src/main/AndroidManifest.xml   App permissions and services
+          app/libs/libbox.aar       Exact arm64 native sing-box library used by APK
+          builds/*.apk              Built Android debug app (arm64)
+          third_party/sing-box-v1.12.22/  Upstream sing-box v1.12.22 Go source for the native engine
+          tests/                    Feed parsing and throughput unit tests
+          scripts/ and feeds/       Source and OpenVPN public directory utilities
+          .github/workflows/        Reproducible build and refresh workflows
+          *.gradle, gradle.properties, settings.gradle  Android build configuration
+          README.md                 Original project README and version change notes
+
+          Build: Install Android SDK 36, Android Gradle Plugin/Gradle tooling,
+          JDK 17, then run gradle :app:assembleDebug from the root directory.
+          app/libs/libbox.aar is included so building the APK does not require
+          re-running Go gomobile. The original GitHub Actions workflow shows
+          how to rebuild libbox from the pinned upstream commit.
+          Internet access is still required for Gradle/Maven dependencies
+          unless those dependencies are already cached.
+
+          LICENSE NOTE: The bundled upstream sing-box source and libbox library
+          are governed by their own upstream GPL-3.0-or-later license; see
+          third_party/sing-box-v1.12.22/LICENSE. Respect all relevant notices.
+          This is a debug APK; physical-device network operation is not guaranteed.
+          BUNDLE_GUIDE
+          cd "$RUNNER_TEMP"
+          zip -q -r "$GITHUB_WORKSPACE/AegisVPN-v0.5.4-FULL-SOURCE.zip" AegisVPN-v0.5.4-FULL
+          unzip -tq "$GITHUB_WORKSPACE/AegisVPN-v0.5.4-FULL-SOURCE.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AegisVPN-v0.5.4-FULL-SOURCE
+          path: AegisVPN-v0.5.4-FULL-SOURCE.zip
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: AegisVPN-Android-debug
