@@ -11,46 +11,29 @@ public final class VpnController {
     private static final int ASK_APP=8841,ASK_VPN=8842;
     private final Activity activity;
     private final Runnable changed;
-    private final java.util.function.Consumer<String> failed;
-    private long attemptStartedAt=0L;
+    private final java.util.function.Consumer<String> message;
     private IOpenVPNAPIService remote;
-    private boolean callbackRegistered;
     private String pending;
     private boolean bound=false;
     private boolean requesting=false;
     private final Handler timer=new Handler(Looper.getMainLooper());
     private final Runnable timeout=this::onTimeout;
-    private void onTimeout(){
-        if(state==State.CONNECTING){
-            disconnect();
-            failed.accept("OpenVPN handshake timed out after 35 seconds");
-        }
-    }
-    VpnController(Activity activity,Runnable changed,
-                  java.util.function.Consumer<String> failed){
-        this.activity=activity;this.changed=changed;this.failed=failed;
+    private void onTimeout(){if(state==State.CONNECTING){disconnect();message.accept("The server did not establish a tunnel within 60 seconds. Try another server or network; importing a profile does not prove it is reachable.");}}
+    VpnController(Activity activity,Runnable changed,java.util.function.Consumer<String> message){
+        this.activity=activity;this.changed=changed;this.message=message;
     }
     private final IOpenVPNStatusCallback callback=new IOpenVPNStatusCallback.Stub(){
         @Override public void newStatus(String uuid,String status,String text,String level){
             activity.runOnUiThread(()->{
                 String s=status==null?"":status.toUpperCase(java.util.Locale.ROOT);
-                if(s.equals("CONNECTED")){
-                    timer.removeCallbacks(timeout);state=State.ON;changed.run();
-                }else if(s.equals("AUTH_FAILED")){
-                    boolean wasConnecting=state==State.CONNECTING;
-                    timer.removeCallbacks(timeout);state=State.OFF;changed.run();
-                    if(wasConnecting)failed.accept("OpenVPN authentication failed");
+                if(s.equals("CONNECTED")){timer.removeCallbacks(timeout);state=State.ON;changed.run();}
+                else if(s.equals("AUTH_FAILED")){
+                    state=State.OFF;changed.run();message.accept("OpenVPN authentication failed.");
                 }else if(s.equals("NOPROCESS")||s.equals("EXITING")||s.equals("DISCONNECTED")){
-                    boolean wasConnecting=state==State.CONNECTING;
-                    // Status callbacks may replay the PREVIOUS profile's EXITING
-                    // during a rapid server switch. Let the new attempt settle first.
-                    if(wasConnecting&&SystemClock.elapsedRealtime()-attemptStartedAt<2500)return;
-                    timer.removeCallbacks(timeout);state=State.OFF;changed.run();
-                    if(wasConnecting)failed.accept("Server closed the OpenVPN connection");
+                    state=State.OFF;changed.run();
                 }else if(s.equals("CONNECTING")||s.equals("WAIT")||s.equals("AUTH")||
                          s.equals("GET_CONFIG")||s.equals("ASSIGN_IP")||s.equals("RECONNECTING")){
-                    // Ignore late progress events after an explicit user-requested disconnect.
-                    if(state!=State.OFF){state=State.CONNECTING;changed.run();}
+                    state=State.CONNECTING;changed.run();
                 }
             });
         }
@@ -61,18 +44,12 @@ public final class VpnController {
             beginAuthorized();
         }
         @Override public void onServiceDisconnected(ComponentName name){
-            boolean wasConnecting=state==State.CONNECTING;
-            remote=null;callbackRegistered=false;state=State.OFF;
-            activity.runOnUiThread(()->{
-                changed.run();
-                if(wasConnecting)failed.accept("OpenVPN companion service disconnected");
-            });
+            remote=null;state=State.OFF;activity.runOnUiThread(changed);
         }
     };
     void connect(String ovpn){
         if(state!=State.OFF||ovpn==null||ovpn.isEmpty())return;
-        state=State.CONNECTING;attemptStartedAt=SystemClock.elapsedRealtime();
-        changed.run();pending=ovpn;requesting=true;
+        state=State.CONNECTING;changed.run();pending=ovpn;requesting=true;
         try{
             if(remote==null){
                 Intent i=new Intent("de.blinkt.openvpn.api.IOpenVPNAPIService").setPackage(PACKAGE);
@@ -90,9 +67,9 @@ public final class VpnController {
             if(a!=null){activity.startActivityForResult(a,ASK_APP);return;}
             Intent b=remote.prepareVPNService();
             if(b!=null){activity.startActivityForResult(b,ASK_VPN);return;}
-            if(!callbackRegistered){remote.registerStatusCallback(callback);callbackRegistered=true;}
+            remote.registerStatusCallback(callback);
             remote.startVPN(pending);
-            timer.removeCallbacks(timeout);timer.postDelayed(timeout,35000);
+            timer.removeCallbacks(timeout);timer.postDelayed(timeout,60000);
             pending=null;requesting=false;
         }catch(Exception e){fail("OpenVPN service authorization/start failed: "+e.getMessage());}
     }
@@ -101,31 +78,16 @@ public final class VpnController {
         if(result!=Activity.RESULT_OK)fail("VPN permission not granted.");
         else beginAuthorized();
     }
-    /** User-requested server switch. Disconnect the old remote session first,
-     * then begin the replacement without requiring a second tap. */
-    void replace(String ovpn){
-        if(ovpn==null||ovpn.length()<80)return;
-        if(state==State.OFF){connect(ovpn);return;}
-        timer.removeCallbacks(timeout);
-        try{if(remote!=null)remote.disconnect();}catch(Exception ignored){}
-        requesting=false;pending=null;state=State.OFF;changed.run();
-        // Allow the OpenVPN client to release Android's single active VPN tunnel.
-        timer.postDelayed(()->connect(ovpn),400);
-    }
     void disconnect(){
         timer.removeCallbacks(timeout);
         try{if(remote!=null)remote.disconnect();}catch(Exception ignored){}
         requesting=false;pending=null;state=State.OFF;changed.run();
     }
-    void fail(String why){
-        timer.removeCallbacks(timeout);
-        pending=null;requesting=false;state=State.OFF;changed.run();
-        failed.accept(why);
-    }
+    void fail(String why){pending=null;requesting=false;state=State.OFF;changed.run();message.accept(why);}
     void close(){
         timer.removeCallbacks(timeout);
         try{if(remote!=null)remote.unregisterStatusCallback(callback);}catch(Exception ignored){}
         if(bound){try{activity.unbindService(service);}catch(Exception ignored){}}
-        remote=null;bound=false;callbackRegistered=false;
+        remote=null;bound=false;
     }
 }
