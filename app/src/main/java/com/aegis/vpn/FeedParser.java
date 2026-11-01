@@ -24,6 +24,13 @@ final class FeedParser {
    }}catch(Exception e){continue;}
    result.put(v,new Entry(kind,v,source));
   }
+  // A document preview contains metadata but not downloadable file bytes.
+  Matcher posts=Pattern.compile("data-post=\"([A-Za-z0-9_]+/[0-9]+)\"([\\s\\S]*?)(?=data-post=\"|\\z)").matcher(body);
+  while(posts.find()&&result.size()<350){
+   if(Pattern.compile("(?i)\\.npv[st4]?").matcher(posts.group(2)).find()){
+    String link="https://t.me/"+posts.group(1);result.put(link,new Entry("NAPSTERNETV",link,source));
+   }
+  }
   return new ArrayList<>(result.values());
  }
 }

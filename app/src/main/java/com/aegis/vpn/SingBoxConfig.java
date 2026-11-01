@@ -90,30 +90,13 @@ final class SingBoxConfig {
             String sni=param(uri,"sni","serverName");
             if(!sni.isEmpty())tls.put("server_name",sni);
             String fp=param(uri,"fp","fingerprint");
-            // REALITY requires a uTLS client hello even when fp is absent in a share link.
-            // Prevent a single malformed REALITY node from killing the entire URLTest group.
-            if(security.equals("reality")){
-                String[] known={"chrome","firefox","edge","safari","ios","android","random","randomized"};
-                boolean accepted=false;
-                for(String value:known)if(value.equalsIgnoreCase(fp))accepted=true;
-                tls.put("utls",new JSONObject().put("enabled",true)
-                    .put("fingerprint",accepted?fp.toLowerCase(Locale.ROOT):"chrome"));
-            }else if(!fp.isEmpty())tls.put("utls",new JSONObject()
-                .put("enabled",true).put("fingerprint",fp));
+            if(!fp.isEmpty())tls.put("utls",new JSONObject().put("enabled",true).put("fingerprint",fp));
             if(security.equals("reality")){
                 String key=param(uri,"pbk","publicKey");
-                if(key.isEmpty()||!key.matches("[a-zA-Z0-9_-]{42,44}={0,2}"))
-                    throw new IllegalArgumentException("Reality public key invalid");
-                String padded=key.replace('-','+').replace('_','/');
-                int remainder=padded.length()%4;
-                if(remainder>0)padded+="====".substring(remainder);
-                if(Base64.decode(padded,Base64.DEFAULT).length!=32)
-                    throw new IllegalArgumentException("Reality public key length invalid");
+                if(key.isEmpty())throw new IllegalArgumentException("Reality public key missing");
                 JSONObject reality=new JSONObject().put("enabled",true).put("public_key",key);
                 String sid=param(uri,"sid","shortId");
-                if(!sid.matches("(?i)[a-f0-9]{0,16}")||sid.length()%2!=0)
-                    throw new IllegalArgumentException("Reality short ID invalid");
-                reality.put("short_id",sid);
+                if(!sid.isEmpty())reality.put("short_id",sid);
                 tls.put("reality",reality);
             }
             String alpn=param(uri,"alpn");
@@ -125,8 +108,6 @@ final class SingBoxConfig {
             outbound.put("tls",tls);
         }
         String net=param(uri,"type");
-        if(!net.isEmpty()&&!Arrays.asList("tcp","ws","grpc","http","h2").contains(net))
-            throw new IllegalArgumentException("Unsupported transport "+net);
         String path=param(uri,"path");
         if(net.equals("ws")){
             JSONObject transport=new JSONObject().put("type","ws").put("path",path.isEmpty()?"/":path);
@@ -160,8 +141,6 @@ final class SingBoxConfig {
             .put("server_port",port).put("uuid",uuid).put("security",v.optString("scy","auto"))
             .put("alter_id",v.optInt("aid",0));
         String network=v.optString("net"),path=v.optString("path"),sni=v.optString("sni");
-        if(!network.isEmpty()&&!Arrays.asList("tcp","ws","grpc").contains(network))
-            throw new IllegalArgumentException("Unsupported VMess transport "+network);
         if(v.optString("tls").equalsIgnoreCase("tls")){
             JSONObject tls=new JSONObject().put("enabled",true);
             if(!sni.isEmpty())tls.put("server_name",sni);
@@ -199,39 +178,6 @@ final class SingBoxConfig {
         return new JSONObject().put("type","shadowsocks").put("tag","proxy")
             .put("server",host).put("server_port",port)
             .put("method",head.substring(0,sep)).put("password",head.substring(sep+1));
-    }
-    /**
-     * Remove only a failing auto-group node from an invalid generated config.
-     * Engine errors use outbound[zeroBasedIndex]. Do not modify manual configs
-     * or remove urltest/direct; fail rather than silently bypassing the proxy.
-     */
-    static String dropInvalidAutoNode(String config,String error){
-        try{
-            if(error==null)return null;
-            java.util.regex.Matcher m=java.util.regex.Pattern
-                .compile("(?i)outbound\\[([0-9]+)\\]").matcher(error);
-            if(!m.find())return null;
-            int index=Integer.parseInt(m.group(1));
-            JSONObject root=new JSONObject(config);
-            JSONArray outputs=root.getJSONArray("outbounds");
-            if(index<0||index>=outputs.length())return null;
-            JSONObject bad=outputs.getJSONObject(index);
-            String tag=bad.optString("tag","");
-            if(!tag.startsWith("node-"))return null;
-            JSONArray remaining=new JSONArray();
-            for(int i=0;i<outputs.length();i++)if(i!=index)remaining.put(outputs.getJSONObject(i));
-            for(int i=0;i<remaining.length();i++){
-                JSONObject o=remaining.getJSONObject(i);
-                if(!o.optString("type").equals("urltest"))continue;
-                JSONArray candidates=o.getJSONArray("outbounds"),valid=new JSONArray();
-                for(int j=0;j<candidates.length();j++)
-                    if(!tag.equals(candidates.getString(j)))valid.put(candidates.getString(j));
-                if(valid.length()==0)return null;
-                o.put("outbounds",valid);
-            }
-            root.put("outbounds",remaining);
-            return root.toString();
-        }catch(Exception ignored){return null;}
     }
     static boolean supported(String value) {
         try{outbound(value);return true;}catch(Exception e){return false;}
